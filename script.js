@@ -250,7 +250,7 @@ async function sendMessage() {
 
     try {
 
-        const response = await fetch(LOCAL_SERVER_URL, {
+        const response = await fetch('https://my-bot-zbgv.onrender.com/chat', {
 
             method: "POST",
 
@@ -422,6 +422,7 @@ document.getElementById('imageModal').onclick = function() {
 
 
 };
+
 
 
 
