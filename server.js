@@ -70,7 +70,8 @@ async function askGroq(text, image = null, history = []) {
         method: "POST",
         headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-            model: image ? "meta-llama/llama-4-scout-17b-16e-instruct" : "meta-llama/llama-3.3-70b-versatile",
+           // Используй только этот блок для модели!
+model: image ? "meta-llama/llama-3.2-11b-vision-preview" : "meta-llama/llama-3.3-70b-versatile",
             messages: [
                 { 
                     role: "system", 
@@ -137,6 +138,7 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Сервер запущен на порту ${PORT}`);
     bot.launch();
 });
+
 
 
 
