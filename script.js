@@ -1,4 +1,4 @@
-const LOCAL_SERVER_URL = "http://127.0.0.1:3000/chat";
+const response = await fetch('https://my-bot-zbgv.onrender.com/chat';
 
 
 
@@ -419,5 +419,6 @@ function openImage(src) {
 document.getElementById('imageModal').onclick = function() {
 
     this.style.display = "none";
+
 
 };
