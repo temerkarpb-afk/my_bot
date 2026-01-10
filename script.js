@@ -1,4 +1,4 @@
-const LOCAL_SERVER_URL = "https://my-bot-zbgv.onrender.com";
+const LOCAL_SERVER_URL = "https://my-bot-zbgv.onrender.com/chat";
 
 
 
@@ -422,6 +422,7 @@ document.getElementById('imageModal').onclick = function() {
 
 
 };
+
 
 
 
