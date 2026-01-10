@@ -41,7 +41,7 @@ async function getVisionDescription(image) {
             method: "POST",
             headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify({
-                model: "meta-llama/llama-3.2-11b-vision-preview",
+                model: "meta-llama/llama-4-scout-17b-16e-instruct",
                 messages: [{ role: "user", content: [
                     { type: "text", text: "Что на фото? Опиши кратко (2-3 слова)." },
                     { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } }
@@ -137,5 +137,6 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Сервер запущен на порту ${PORT}`);
     bot.launch();
 });
+
 
 
