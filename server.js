@@ -33,7 +33,7 @@ async function askGroq(text, image = null, history = []) {
 
         messages.push({ role: "user", content });
 
-        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        const response = await fetch('https://my-bot-zbgv.onrender.com/chat', {
             method: "POST",
             headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -83,4 +83,5 @@ app.listen(PORT, () => {
     console.log(`🚀 Сервер запущен на порту ${PORT}`);
     bot.launch().catch(err => console.error("TG Start Error:", err));
 });
+
 
