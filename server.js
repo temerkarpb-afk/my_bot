@@ -15,7 +15,7 @@ const ADMIN_ID = "6884407224";
 
 // --- ЛОГИКА АНТИ-СОН (RENDER) ---
 // ВСТАВЬ СВОЮ ССЫЛКУ ОТ RENDER НИЖЕ
-const MY_URL = "https://твой-адрес-на-рендере.onrender.com"; 
+const MY_URL = "https://my-bot-zbgv.onrender.com"; 
 
 setInterval(async () => {
     try {
@@ -135,3 +135,4 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Сервер запущен на порту ${PORT}`);
     bot.launch();
 });
+
