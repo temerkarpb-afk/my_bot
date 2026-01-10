@@ -1,4 +1,4 @@
-const response = await fetch('https://my-bot-zbgv.onrender.com/chat')
+const LOCAL_SERVER_URL = "https://my-bot-zbgv.onrender.com";
 
 
 
@@ -422,5 +422,6 @@ document.getElementById('imageModal').onclick = function() {
 
 
 };
+
 
 
