@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI CyberBot v2.0 Vision</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="data:,">
+</head>
+<body>
+<div class="container">
+    <div class="chat">
+        <header class="chat-header">
+            <div class="bot-avatar">🤖</div>
+            <div class="bot-status">
+                <h2>CyberBot v2.0</h2>
+                <span class="online-tag">Vision Active</span>
+            </div>
+        </header>
+
+        <div id="messages" class="messages"></div>
+
+        <div id="typing-box" class="typing-indicator" style="display: none;">
+            <span></span><span></span><span></span>
+        </div>
+
+        <div class="input-box">
+            <label for="fileInput" class="file-label" title="Прикрепить фото">📎</label>
+            <input type="file" id="fileInput" accept="image/*" style="display:none;">
+            <input type="text" id="userInput" placeholder="Напиши или прикрепи фото..." autocomplete="off">
+            <button id="sendBtn">Отправить</button>
+        </div>
+    </div>
+
+    <div class="history-container">
+        <button id="newChatBtn" class="new-chat-btn">+ Новый чат</button>
+        <h3>🕰 История чатов</h3>
+        <div id="history" class="history"></div>
+        <button id="clearBtn" class="clear-all-btn">Очистить всё</button>
+    </div>
+</div>
+<div id="imageModal" style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.9); cursor:pointer; align-items:center; justify-content:center;">
+    <img id="modalImg" style="max-width:90%; max-height:90%; border-radius:10px; box-shadow: 0 0 20px rgba(255,255,255,0.2);">
+</div>
+<script src="script.js"></script>
+</body>
+</html>
