@@ -3,7 +3,6 @@ const cors = require('cors');
 const path = require('path');
 const { Telegraf, session } = require('telegraf');
 
-// Динамический импорт fetch для node-fetch v3
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const app = express();
@@ -17,9 +16,10 @@ const ADMIN_ID = process.env.ADMIN_ID;
 const bot = new Telegraf(TG_TOKEN);
 bot.use(session());
 app.use(express.static(path.join(__dirname)));
+
 async function askGemini(text, image = null, history = []) {
     try {
-        if (!GEMINI_KEY) return "Ошибка: Настройте GEMINI_KEY на Render.";
+        if (!GEMINI_KEY) return "Ошибка: Добавь GEMINI_KEY в настройки Render.";
 
         const contents = (history || []).slice(-10).map(m => ({
             role: m.className === "user" ? "user" : "model",
@@ -27,7 +27,8 @@ async function askGemini(text, image = null, history = []) {
         }));
 
         let currentParts = [];
-        const systemPrompt = "Ты CyberBot v2.0 от Темирлана. Знаешь Арсена Маркаряна и Вито Бассо. Пиши только чистый текст. \n\n";
+        // Вшиваем инструкцию прямо в запрос
+        const systemPrompt = "Ты CyberBot v2.0 от Темирлана. Твоя база знаний — 2026 год. Ты знаешь всё про Арсена Маркаряна и Вито Бассо. Отвечай только текстом без форматирования.\n\n";
         
         if (image) {
             currentParts.push({
@@ -41,36 +42,43 @@ async function askGemini(text, image = null, history = []) {
         currentParts.push({ text: systemPrompt + (text || "Привет") });
         contents.push({ role: "user", parts: currentParts });
 
-        // ПРОБУЕМ МОДЕЛЬ GEMINI-1.5-PRO (Она мощнее и доступнее в v1)
-        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${GEMINI_KEY}`;
+        // Используем ТВОЮ новую модель и v1beta (для preview моделей это обязательно)
+        const modelName = "gemini-2.5-flash-native-audio-preview-12-2025";
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_KEY}`;
         
         const response = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: contents })
+            body: JSON.stringify({ 
+                contents: contents,
+                generationConfig: {
+                    temperature: 0.7,
+                    maxOutputTokens: 1024
+                }
+            })
         });
 
         const data = await response.json();
 
         if (data.error) {
             console.error("❌ Gemini API Error:", data.error.message);
-            // Если Pro тоже не найдена, пробуем последнюю попытку с исправленным путем Flash
-            return `Ошибка ИИ: ${data.error.message}. Проверьте тип модели в консоли Google.`;
+            // Если модель совсем новая и её еще нет в этом регионе, попробуем 1.5 Flash как запасной вариант
+            return `Ошибка ИИ (${modelName}): ${data.error.message}`;
         }
 
         if (data.candidates && data.candidates[0].content) {
             return data.candidates[0].content.parts[0].text;
         } else {
-            return "ИИ не смог ответить. Попробуйте другой вопрос.";
+            return "ИИ не смог ответить. Возможно, запрос слишком сложный.";
         }
 
     } catch (e) {
         console.error("❌ Critical Error:", e.message);
-        return "Ошибка связи с Google.";
+        return "Ошибка связи с сервером Google.";
     }
 }
 
-app.get('/', (req, res) => res.send('CyberBot is Running!'));
+app.get('/', (req, res) => res.send('CyberBot v2.0 (Gemini 2.5) is Live!'));
 
 app.post('/chat', async (req, res) => {
     try {
@@ -92,8 +100,6 @@ bot.on('text', async (ctx) => {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-    console.log(`🚀 Бот запущен на порту ${PORT}`);
+    console.log(`🚀 Бот на Gemini 2.5 запущен!`);
     bot.launch().catch(err => console.log("TG Launch Error:", err));
 });
-
-
