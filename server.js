@@ -8,82 +8,103 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 
-// Используем переменные окружения из настроек Render
-const GROQ_KEY = process.env.GROQ_KEY;
+// Переменные окружения
+const GEMINI_KEY = process.env.GEMINI_KEY || "AIzaSyBGoV90et0rZPNvoru7b86PNgl0EuiiCUY"; 
 const TG_TOKEN = process.env.TG_TOKEN;
-const ADMIN_ID = process.env.ADMIN_ID;
+const ADMIN_ID = process.env.ADMIN_ID; // ВЕРНУЛ ADMIN_ID
 
 const bot = new Telegraf(TG_TOKEN);
 bot.use(session());
 
-// Раздача фронтенда (HTML, CSS, JS)
 app.use(express.static(path.join(__dirname)));
 
-async function askGroq(text, image = null, history = []) {
+async function askGemini(text, image = null, history = []) {
     try {
-        const messages = (history || []).slice(-6).map(m => ({
-            role: m.className === "user" ? "user" : "assistant",
-            content: m.text?.startsWith("[Фото]") ? "Изображение" : (m.text || "")
+        const contents = (history || []).slice(-6).map(m => ({
+            role: m.className === "user" ? "user" : "model",
+            parts: [{ text: m.text || "" }]
         }));
 
-        let content = image ? [
-            { type: "text", text: text || "Проанализируй это фото." },
-            { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } }
-        ] : (text || "Привет");
+        let currentContent = { role: "user", parts: [] };
+        
+        if (image) {
+            currentContent.parts.push({
+                inline_data: {
+                    mime_type: "image/jpeg",
+                    data: image
+                }
+            });
+            currentContent.parts.push({ text: text || "Проанализируй это фото." });
+        } else {
+            currentContent.parts.push({ text: text || "Привет" });
+        }
 
-        messages.push({ role: "user", content });
+        contents.push(currentContent);
 
-                const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        const systemInstruction = "Твой создатель Темирлан. Ты — продвинутый CyberBot v2.0. Ты обладаешь актуальными знаниями о медийных личностях (Арсен Маркарян, Вито Бассо, Шон О Прай). Отвечай грамотно, ставь запятые, не используй символы * # _. Только чистый текст.";
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
             method: "POST",
-            headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                // Если есть фото — vision модель, если только текст — мощная 70B модель
-                model: image ? "llama-3.2-11b-vision-preview" : "llama-3.3-70b-versatile",
-                messages: [
-                    { 
-                        role: "system", 
-                        content: "Твой создатель Темирлан.Ты — продвинутый CyberBot v2.0 созданный Темирланом. Ты знаешь всё о медийных личностях . Отвечай грамотно, ставь запятые, не используй символы * # _. Только чистый текст." 
-                    },
-                    ...messages
-                ],
-                temperature: 0.5
+                contents: contents,
+                system_instruction: { parts: [{ text: systemInstruction }] },
+                generationConfig: {
+                    temperature: 0.7,
+                    maxOutputTokens: 1000,
+                }
             })
         });
 
         const data = await response.json();
-        if (!data.choices || !data.choices[0]) return "Ошибка ИИ: Проверь GROQ_KEY.";
-        return data.choices[0].message.content;
+        
+        if (data.error) {
+            console.error("Gemini API Error:", data.error);
+            return "Ошибка ИИ. Попробуй позже.";
+        }
+
+        return data.candidates[0].content.parts[0].text;
     } catch (e) {
-        console.error("Groq Error:", e);
-        return "Произошла ошибка при запросе к нейросети.";
+        console.error("Gemini Logic Error:", e);
+        return "Ошибка соединения с Google.";
     }
 }
 
-app.get('/', (req, res) => res.send('CyberBot is Live!'));
+app.get('/', (req, res) => res.send('CyberBot is Live with ADMIN_ID check!'));
+
+// Добавил логирование сообщения админу в консоль
+bot.on('text', async (ctx) => {
+    try {
+        if (!ctx.session) ctx.session = { h: [] };
+        
+        // Пример использования ADMIN_ID: логировать запросы от владельца отдельно
+        if (ctx.from.id.toString() === ADMIN_ID) {
+            console.log(`Админ ${ADMIN_ID} прислал сообщение: ${ctx.message.text}`);
+        }
+
+        const answer = await askGemini(ctx.message.text, null, ctx.session.h);
+        const cleanAnswer = answer.replace(/[*#`_~]/g, "").trim();
+        
+        ctx.reply(cleanAnswer);
+        
+        ctx.session.h.push({ className: "user", text: ctx.message.text });
+        ctx.session.h.push({ className: "assistant", text: cleanAnswer });
+    } catch (e) { console.log("TG Text Error:", e); }
+});
 
 app.post('/chat', async (req, res) => {
     try {
         const { text, image, history } = req.body;
-        const answer = await askGroq(text, image, history);
+        const cleanImage = image ? image.replace(/^data:image\/\w+;base64,/, "") : null;
+        const answer = await askGemini(text, cleanImage, history);
         res.json({ text: answer.replace(/[*#`_~]/g, "").trim() });
     } catch (e) {
         res.status(500).json({ text: "Ошибка сервера" });
     }
 });
 
-bot.on('text', async (ctx) => {
-    try {
-        const answer = await askGroq(ctx.message.text, null, ctx.session?.h || []);
-        ctx.reply(answer.replace(/[*#`_~]/g, "").trim());
-    } catch (e) { console.log("TG Text Error:", e); }
-});
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`🚀 Сервер запущен на порту ${PORT}`);
+    console.log(`🚀 Сервер запущен. Админ ID: ${ADMIN_ID || 'не задан'}`);
     bot.launch().catch(err => console.error("TG Start Error:", err));
 });
-
-
-
-
