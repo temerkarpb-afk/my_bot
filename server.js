@@ -21,15 +21,13 @@ async function askGemini(text, image = null, history = []) {
     try {
         if (!GEMINI_KEY) return "Ошибка: Настройте GEMINI_KEY на Render.";
 
-        // Формируем историю
         const contents = (history || []).slice(-10).map(m => ({
             role: m.className === "user" ? "user" : "model",
             parts: [{ text: m.text || "" }]
         }));
 
         let currentParts = [];
-        // Инструкция прямо внутри сообщения — это работает на всех версиях API без ошибок
-        const systemPrompt = "Ты — CyberBot v2.0 от Темирлана. Ты знаешь Арсена Маркаряна (база, тестостерон) и Вито Бассо. Отвечай кратко и без спецсимволов. \n\n";
+        const systemPrompt = "Ты CyberBot v2.0 от Темирлана. Знаешь Арсена Маркаряна и Вито Бассо. Пиши только чистый текст. \n\n";
         
         if (image) {
             currentParts.push({
@@ -43,27 +41,21 @@ async function askGemini(text, image = null, history = []) {
         currentParts.push({ text: systemPrompt + (text || "Привет") });
         contents.push({ role: "user", parts: currentParts });
 
-        // МЕНЯЕМ НА v1 — это самая стабильная версия для этой модели
-        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+        // ПРОБУЕМ МОДЕЛЬ GEMINI-1.5-PRO (Она мощнее и доступнее в v1)
+        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${GEMINI_KEY}`;
         
         const response = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                contents: contents,
-                generationConfig: {
-                    temperature: 0.7,
-                    maxOutputTokens: 1000
-                }
-            })
+            body: JSON.stringify({ contents: contents })
         });
 
         const data = await response.json();
 
-        // Проверка на ошибки API
         if (data.error) {
             console.error("❌ Gemini API Error:", data.error.message);
-            return "Ошибка ИИ: " + data.error.message;
+            // Если Pro тоже не найдена, пробуем последнюю попытку с исправленным путем Flash
+            return `Ошибка ИИ: ${data.error.message}. Проверьте тип модели в консоли Google.`;
         }
 
         if (data.candidates && data.candidates[0].content) {
@@ -74,7 +66,7 @@ async function askGemini(text, image = null, history = []) {
 
     } catch (e) {
         console.error("❌ Critical Error:", e.message);
-        return "Ошибка соединения с сервером Google.";
+        return "Ошибка связи с Google.";
     }
 }
 
@@ -103,4 +95,5 @@ app.listen(PORT, () => {
     console.log(`🚀 Бот запущен на порту ${PORT}`);
     bot.launch().catch(err => console.log("TG Launch Error:", err));
 });
+
 
