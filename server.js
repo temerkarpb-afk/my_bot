@@ -43,7 +43,7 @@ async function askAI(text, image, history) {
             headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify({
                 model: "llama-3.3-70b-versatile",
-                messages: [{role: "system", content: "Ты CyberBot v3.0 от Темирлана."}, ...messages, {role: "user", content: text}],
+                messages: [{role: "system", content: "Ты CyberBot v3.0 от Темирлана.Тщательно проверяй информацию обо всем в интернете."}, ...messages, {role: "user", content: text}],
                 temperature: 0.6
             })
         });
@@ -67,3 +67,4 @@ app.listen(process.env.PORT || 10000, () => {
     console.log("🚀 Бот запущен!");
     bot.launch().catch(() => {});
 });
+
