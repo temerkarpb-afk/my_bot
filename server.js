@@ -21,14 +21,14 @@ async function askGemini(text, history = []) {
     
     for (const modelId of modelOptions) {
         try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${GEMINI_KEY}`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId} generateContent?key=${GEMINI_KEY}`;
             const response = await fetch(url, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     contents: [{ 
                         role: "user", 
-                        parts: [{ text: "Ты CyberBot v3.0 от Темирлана. Знаешь базу Арсена Маркаряна. Отвечай кратко.\n\n" + text }] 
+                        parts: [{ text: "Ты CyberBot v3.0 от Темирлана.Отвечай кратко.\n\n" + text }] 
                     }]
                 })
             });
@@ -75,6 +75,7 @@ app.listen(PORT, () => {
     console.log(`🚀 Работаем на порту ${PORT}`);
     bot.launch();
 });
+
 
 
 
