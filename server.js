@@ -15,42 +15,55 @@ const bot = new Telegraf(TG_TOKEN);
 bot.use(session());
 app.use(express.static(path.join(__dirname)));
 
-async function askGemini(text, history = []) {
-    // Список моделей: сначала пробуем Gemini 3, если нет - 1.5 Flash
-    const modelOptions = ["gemini-3-pro-preview", "gemini-1.5-flash"];
-    
-    for (const modelId of modelOptions) {
-        try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId} generateContent?key=${GEMINI_KEY}`;
-            const response = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    contents: [{ 
-                        role: "user", 
-                        parts: [{ text: "Ты CyberBot v3.0 от Темирлана.Отвечай кратко.\n\n" + text }] 
-                    }]
-                })
+async function askGemini(text, image = null, history = []) {
+    try {
+        if (!GEMINI_KEY) return "Ошибка: Ключ GEMINI_KEY не найден в настройках Render.";
+
+        // Оставляем только самое важное для экономии токенов
+        const contents = (history || []).slice(-6).map(m => ({
+            role: m.className === "user" ? "user" : "model",
+            parts: [{ text: m.text || "" }]
+        }));
+
+        let currentParts = [];
+        const systemPrompt = "Ты — CyberBot v2.0 от Темирлана. Знаешь Арсена Маркаряна и Вито Бассо. Отвечай кратко.\n\n";
+        
+        if (image) {
+            currentParts.push({
+                inline_data: { mime_type: "image/jpeg", data: image }
             });
-
-            const data = await response.json();
-
-            // Если квота превышена или модель не найдена — пробуем следующую
-            if (data.error && (data.error.message.includes("quota") || data.error.message.includes("not found"))) {
-                console.warn(`⚠️ Модель ${modelId} недоступна, пробую запасную...`);
-                continue; 
-            }
-
-            if (data.candidates) {
-                return data.candidates[0].content.parts[0].text;
-            }
-        } catch (e) {
-            console.error("Ошибка запроса:", e.message);
         }
-    }
-    return "Все линии ИИ сейчас заняты. Попробуй через минуту.";
-}
+        
+        currentParts.push({ text: systemPrompt + (text || "Привет") });
+        contents.push({ role: "user", parts: currentParts });
 
+        // Используем 1.5-flash — она НИКОГДА не выдает ошибку "not found"
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+        
+        const response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contents: contents })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+            console.error("Гугол ругается:", data.error.message);
+            return `Ошибка ИИ: ${data.error.message}`; 
+        }
+
+        if (data.candidates && data.candidates[0].content) {
+            return data.candidates[0].content.parts[0].text;
+        }
+        
+        return "ИИ прислал пустой ответ. Попробуй еще раз.";
+
+    } catch (e) {
+        console.error("Критическая ошибка:", e);
+        return "Ошибка связи: " + e.message;
+    }
+}
 // ЭТОТ БЛОК УБИРАЕТ 404
 app.post('/chat', async (req, res) => {
     try {
@@ -75,6 +88,7 @@ app.listen(PORT, () => {
     console.log(`🚀 Работаем на порту ${PORT}`);
     bot.launch();
 });
+
 
 
 
