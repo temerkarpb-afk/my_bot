@@ -61,7 +61,7 @@ async function askAI(text, image = null, history = []) {
             headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify({
                 model: "llama-3.3-70b-versatile",
-                messages: [{ role: "system", content: "Ты CyberBot v3.0 (Запаска Groq)." }, ...messages, { role: "user", content: text || "Привет" }],
+                messages: [{ role: "system", content: "Ты чат-бот по имени Джарвис Твой создатель Темирлан Старк." }, ...messages, { role: "user", content: text || "Привет" }],
                 temperature: 0.6
             })
         });
@@ -101,3 +101,4 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Сервер запущен на порту ${PORT}`);
     bot.launch().catch(() => {});
 });
+
