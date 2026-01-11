@@ -19,7 +19,7 @@ app.use(express.static(path.join(__dirname)));
 
 async function askGemini(text, image = null, history = []) {
     try {
-        if (!GEMINI_KEY) return "Ошибка: Ключ GEMINI_KEY не найден в настройках Render.";
+        if (!GEMINI_KEY) return "Ошибка: Ключ GEMINI_KEY не найден.";
 
         // Преобразование истории в формат Gemini
         const contents = (history || []).slice(-10).map(m => ({
@@ -39,39 +39,43 @@ async function askGemini(text, image = null, history = []) {
         currentParts.push({ text: text || "Привет" });
         contents.push({ role: "user", parts: currentParts });
 
-        // Важно: используем v1beta для поддержки system_instruction
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+        // ИСПОЛЬЗУЕМ СТАБИЛЬНУЮ ВЕРСИЮ v1 (она надежнее для generateContent)
+        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
         
         const response = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 contents: contents,
-                system_instruction: { 
-                    parts: [{ text: "Ты продвинутый CyberBot v2.0 от Темирлана. Отвечай только текстом, без символов форматирования." }] 
+                // Системная инструкция для стабильной версии v1 передается немного иначе в некоторых случаях, 
+                // но Gemini 1.5 Flash понимает её в блоке systemInstruction
+                systemInstruction: { 
+                    parts: [{ text: "Ты продвинутый CyberBot v2.0 от Темирлана. Твоя база знаний актуальна на 2026 год. Ты знаешь Арсена Маркаряна, Вито Бассо и других медийных личностей. Пиши только чистый текст без символов * # _." }] 
                 },
-                generationConfig: { temperature: 0.7, maxOutputTokens: 1000 }
+                generationConfig: {
+                    temperature: 0.7,
+                    maxOutputTokens: 1000
+                }
             })
         });
 
-        // Если пришел HTML вместо JSON
-        const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-            const raw = await response.text();
-            console.error("❌ Google вернул HTML вместо JSON. Возможно, бан региона или неверный URL.", raw.slice(0, 200));
-            return "Ошибка: Google API вернул некорректный ответ (HTML). Проверьте регион сервера.";
-        }
-
         const data = await response.json();
+
         if (data.error) {
-            console.error("❌ Ошибка Gemini:", data.error.message);
+            console.error("❌ Gemini API Error:", data.error.message);
             return `Ошибка ИИ: ${data.error.message}`;
         }
 
-        return data.candidates[0].content.parts[0].text;
+        if (data.candidates && data.candidates[0].content) {
+            return data.candidates[0].content.parts[0].text;
+        } else {
+            console.error("❌ Неожиданный ответ:", data);
+            return "ИИ не смог ответить. Попробуйте перефразировать запрос.";
+        }
+
     } catch (e) {
-        console.error("❌ Критическая ошибка:", e.message);
-        return "Произошла ошибка при связи с Google.";
+        console.error("❌ Critical Error:", e.message);
+        return "Произошла ошибка при связи с Google ИИ.";
     }
 }
 
@@ -101,3 +105,4 @@ app.listen(PORT, () => {
     console.log(`🚀 Бот запущен на порту ${PORT}`);
     bot.launch();
 });
+
