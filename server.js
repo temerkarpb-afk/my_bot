@@ -24,7 +24,7 @@ async function askGemini(text, history = []) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                contents: [{ role: "user", parts: [{ text: "Ты CyberBot v2.0. Знаешь Маркаряна. Отвечай кратко.\n\n" + text }] }]
+                contents: [{ role: "user", parts: [{ text: "Ты CyberBot v2.0 созданный Темирланом. Отвечай кратко.\n\n" + text }] }]
             })
         });
 
@@ -47,4 +47,5 @@ app.listen(PORT, () => {
     console.log(`🚀 Работаем на порту ${PORT}`);
     bot.launch();
 });
+
 
