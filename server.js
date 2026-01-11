@@ -22,35 +22,32 @@ function formatResponse(text) {
     return text.replace(/[*#`_~]/g, "").trim();
 }
 
-async function askGroq(text, image = null, history = []) {
+async function askKimi(text, history = []) {
     try {
-        const messages = (history || []).slice(-6).map(m => ({
-            role: m.className === "user" ? "user" : "assistant",
-            content: m.text.startsWith("IMAGEDATA:") ? "Изображение" : m.text
-        }));
-
-        let content = image ? [
-            { type: "text", text: text || "Проанализируй фото." },
-            { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } }
-        ] : text || "Привет";
-
-        messages.push({ role: "user", content });
-
-        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
             method: "POST",
-            headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
+            headers: { 
+                "Authorization": `Bearer ТВОЙ_КЛЮЧ_MOONSHOT`, 
+                "Content-Type": "application/json" 
+            },
             body: JSON.stringify({
-                model: "meta-llama/llama-4-scout-17b-16e-instruct",
+                model: "kimi-k2-instruct-0905",
                 messages: [
-                    { role: "system", content: "Ты CyberBot v3.0 от Темирлана. Пиши грамотно, с запятыми. Только текст." },
-                    ...messages
+                    { role: "system", content: "Ты CyberBot v3.0, мощный ИИ от Темирлана." },
+                    ...history.map(m => ({
+                        role: m.className === "user" ? "user" : "assistant",
+                        content: m.text
+                    })),
+                    { role: "user", content: text }
                 ],
-                temperature: 0.6
+                temperature: 0.3 // Для более точных и логичных ответов
             })
         });
         const data = await response.json();
-        return data.choices ? data.choices[0].message.content : "ИИ не ответил";
-    } catch (e) { return "Ошибка ИИ."; }
+        return data.choices[0].message.content;
+    } catch (e) {
+        return "Ошибка соединения с Kimi API.";
+    }
 }
 
 app.post('/chat', async (req, res) => {
@@ -74,3 +71,4 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Работаем на порту ${PORT}`);
     bot.launch().catch(() => console.log("Бот уже запущен."));
 });
+
