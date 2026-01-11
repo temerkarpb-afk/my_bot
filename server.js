@@ -10,7 +10,7 @@ app.use(express.json({ limit: '15mb' }));
 
 const GEMINI_KEY = process.env.GEMINI_KEY;
 const TG_TOKEN = process.env.TG_TOKEN;
-
+const ADMIN_ID = process.env.ADMIN_ID;
 const bot = new Telegraf(TG_TOKEN);
 bot.use(session());
 app.use(express.static(path.join(__dirname)));
@@ -47,3 +47,4 @@ app.listen(PORT, () => {
     console.log(`🚀 Работаем на порту ${PORT}`);
     bot.launch();
 });
+
