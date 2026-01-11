@@ -11,12 +11,11 @@ const typingBox = document.getElementById("typing-box");
 let currentChatId = localStorage.getItem("currentChatId");
 let selectedImageBase64 = null;
 
-// --- 1. АНИМАЦИИ И РЕНДЕР ---
-
+// --- 1. ОТОБРАЖЕНИЕ СООБЩЕНИЙ ---
 function renderMessage(author, text, className, isImage = false) {
     if (!messagesContainer) return;
     const div = document.createElement("div");
-    div.className = `message ${className} animate-fade-in`; // Добавили класс анимации
+    div.className = `message ${className} animate-fade-in`; 
     
     if (isImage) {
         div.innerHTML = `<strong>${author}:</strong><br><img src="data:image/jpeg;base64,${text}" class="chat-img" onclick="openImage(this.src)">`;
@@ -28,6 +27,7 @@ function renderMessage(author, text, className, isImage = false) {
     messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' });
 }
 
+// --- 2. ЛОГИКА ИСТОРИИ (КЛИКАБЕЛЬНОСТЬ) ---
 function updateHistoryUI() {
     if (!historyList) return;
     const allChats = JSON.parse(localStorage.getItem("allChats")) || {};
@@ -36,21 +36,21 @@ function updateHistoryUI() {
     Object.keys(allChats).sort().reverse().forEach(id => {
         const chat = allChats[id];
         const firstMsg = chat.find(m => m.className === "user")?.text || "Новый чат";
-        const title = firstMsg.startsWith("IMAGEDATA:") ? "🖼 Фото" : firstMsg;
+        const title = firstMsg.substring(0, 15) + (firstMsg.length > 15 ? "..." : "");
 
         const item = document.createElement("div");
         item.className = `history-item ${id === currentChatId ? 'active' : ''}`;
-        item.onclick = () => loadChat(id); // Клик по чату работает
         
+        // ВОЗВРАЩАЕМ КЛИК НА ЧАТ
+        item.onclick = () => loadChat(id); 
+
         item.innerHTML = `
-            <span>${title.substring(0, 20)}...</span>
+            <span>${title}</span>
             <button class="delete-mini-btn" onclick="event.stopPropagation(); deleteChat('${id}')">×</button>
         `;
         historyList.appendChild(item);
     });
 }
-
-// --- 2. ЛОГИКА ЧАТОВ ---
 
 function createNewChat() {
     currentChatId = "chat_" + Date.now();
@@ -61,7 +61,7 @@ function createNewChat() {
     localStorage.setItem("allChats", JSON.stringify(allChats));
     
     messagesContainer.innerHTML = "";
-    renderMessage("Система", "Чат очищен. Жду твой запрос.", "bot");
+    renderMessage("CyberBot", "Новый чат создан. Чем могу помочь?", "bot");
     updateHistoryUI();
 }
 
@@ -88,8 +88,7 @@ function deleteChat(id) {
     else updateHistoryUI();
 }
 
-// --- 3. ОТПРАВКА ---
-
+// --- 3. ОТПРАВКА С АНИМАЦИЕЙ ---
 async function sendMessage() {
     const text = input.value.trim();
     if (!text && !selectedImageBase64) return;
@@ -97,7 +96,6 @@ async function sendMessage() {
     const allChats = JSON.parse(localStorage.getItem("allChats")) || {};
     const chatHistory = allChats[currentChatId] || [];
 
-    // Показываем свои сообщения сразу
     if (selectedImageBase64) {
         renderMessage("Вы", selectedImageBase64, "user", true);
         chatHistory.push({ author: "Вы", text: "IMAGEDATA:" + selectedImageBase64, className: "user" });
@@ -111,7 +109,7 @@ async function sendMessage() {
     input.value = "";
     selectedImageBase64 = null;
     
-    // Включаем анимацию загрузки
+    // ВКЛЮЧАЕМ АНИМАЦИЮ
     if (typingBox) typingBox.style.display = "flex";
 
     try {
@@ -129,67 +127,45 @@ async function sendMessage() {
         });
 
         const data = await response.json();
-        if (typingBox) typingBox.style.display = "none"; // Выключаем анимацию
+        
+        // ВЫКЛЮЧАЕМ АНИМАЦИЮ
+        if (typingBox) typingBox.style.display = "none";
 
-        renderMessage("Бот", data.text, "bot");
-        chatHistory.push({ author: "Бот", text: data.text, className: "bot" });
+        renderMessage("CyberBot", data.text, "bot");
+        chatHistory.push({ author: "CyberBot", text: data.text, className: "bot" });
         
         allChats[currentChatId] = chatHistory;
         localStorage.setItem("allChats", JSON.stringify(allChats));
         updateHistoryUI();
+        
     } catch (e) {
         if (typingBox) typingBox.style.display = "none";
-        renderMessage("Бот", "❌ Ошибка связи с сервером", "bot");
+        renderMessage("CyberBot", "❌ Ошибка сервера.", "bot");
     }
 }
 
 // --- 4. СОБЫТИЯ ---
-
-if (sendBtn) sendBtn.onclick = sendMessage;
-if (newChatBtn) newChatBtn.onclick = createNewChat;
-if (clearBtn) {
-    clearBtn.onclick = () => {
-        if(confirm("Удалить все чаты?")) {
-            localStorage.clear();
-            location.reload();
-        }
-    };
-}
-
-if (input) {
-    input.onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
-}
-
-if (fileInput) {
-    fileInput.onchange = (e) => {
-        const file = e.target.files[0];
-        const reader = new FileReader();
-        reader.onload = () => {
-            selectedImageBase64 = reader.result.split(',')[1];
-            // Небольшая "анимация" готовности фото
-            const tip = document.createElement("div");
-            tip.className = "bot-notice animate-fade-in";
-            tip.innerText = "🖼 Фото прикреплено";
-            messagesContainer.appendChild(tip);
-        };
-        reader.readAsDataURL(file);
-    };
-}
-
-function openImage(src) {
-    const modal = document.getElementById('imageModal');
-    const modalImg = document.getElementById('modalImg');
-    if (modal && modalImg) {
-        modal.style.display = "flex";
-        modalImg.src = src;
+sendBtn.onclick = sendMessage;
+newChatBtn.onclick = createNewChat;
+clearBtn.onclick = () => {
+    if(confirm("Очистить всю историю?")) {
+        localStorage.clear();
+        location.reload();
     }
-}
+};
 
-// Закрытие модалки
-const modal = document.getElementById('imageModal');
-if(modal) modal.onclick = () => modal.style.display = "none";
+input.onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
 
-// Старт приложения
-const chats = JSON.parse(localStorage.getItem("allChats")) || {};
-if (!currentChatId || !chats[currentChatId]) createNewChat();
+fileInput.onchange = (e) => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = () => {
+        selectedImageBase64 = reader.result.split(',')[1];
+        renderMessage("Система", "🖼 Фото выбрано", "bot");
+    };
+    reader.readAsDataURL(file);
+};
+
+// Старт
+if (!currentChatId) createNewChat();
 else loadChat(currentChatId);
