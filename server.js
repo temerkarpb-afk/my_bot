@@ -8,103 +8,96 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 
-// Переменные окружения
-const GEMINI_KEY = process.env.GEMINI_KEY || "AIzaSyBGoV90et0rZPNvoru7b86PNgl0EuiiCUY"; 
+// Переменные окружения (Берите их из настроек Render!)
+const GEMINI_KEY = process.env.GEMINI_KEY; 
 const TG_TOKEN = process.env.TG_TOKEN;
-const ADMIN_ID = process.env.ADMIN_ID; // ВЕРНУЛ ADMIN_ID
+const ADMIN_ID = process.env.ADMIN_ID;
 
 const bot = new Telegraf(TG_TOKEN);
 bot.use(session());
-
 app.use(express.static(path.join(__dirname)));
 
 async function askGemini(text, image = null, history = []) {
     try {
-        const contents = (history || []).slice(-6).map(m => ({
+        if (!GEMINI_KEY) return "Ошибка: Ключ GEMINI_KEY не найден в настройках Render.";
+
+        // Преобразование истории в формат Gemini
+        const contents = (history || []).slice(-10).map(m => ({
             role: m.className === "user" ? "user" : "model",
             parts: [{ text: m.text || "" }]
         }));
 
-        let currentContent = { role: "user", parts: [] };
-        
+        let currentParts = [];
         if (image) {
-            currentContent.parts.push({
+            currentParts.push({
                 inline_data: {
                     mime_type: "image/jpeg",
-                    data: image
+                    data: image.replace(/^data:image\/\w+;base64,/, "")
                 }
             });
-            currentContent.parts.push({ text: text || "Проанализируй это фото." });
-        } else {
-            currentContent.parts.push({ text: text || "Привет" });
         }
+        currentParts.push({ text: text || "Привет" });
+        contents.push({ role: "user", parts: currentParts });
 
-        contents.push(currentContent);
-
-        const systemInstruction = "Твой создатель Темирлан. Ты — продвинутый CyberBot v2.0. Ты обладаешь актуальными знаниями о медийных личностях (Арсен Маркарян, Вито Бассо, Шон О Прай). Отвечай грамотно, ставь запятые, не используй символы * # _. Только чистый текст.";
-
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
+        // Важно: используем v1beta для поддержки system_instruction
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+        
+        const response = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 contents: contents,
-                system_instruction: { parts: [{ text: systemInstruction }] },
-                generationConfig: {
-                    temperature: 0.7,
-                    maxOutputTokens: 1000,
-                }
+                system_instruction: { 
+                    parts: [{ text: "Ты продвинутый CyberBot v2.0 от Темирлана. Отвечай только текстом, без символов форматирования." }] 
+                },
+                generationConfig: { temperature: 0.7, maxOutputTokens: 1000 }
             })
         });
 
+        // Если пришел HTML вместо JSON
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            const raw = await response.text();
+            console.error("❌ Google вернул HTML вместо JSON. Возможно, бан региона или неверный URL.", raw.slice(0, 200));
+            return "Ошибка: Google API вернул некорректный ответ (HTML). Проверьте регион сервера.";
+        }
+
         const data = await response.json();
-        
         if (data.error) {
-            console.error("Gemini API Error:", data.error);
-            return "Ошибка ИИ. Попробуй позже.";
+            console.error("❌ Ошибка Gemini:", data.error.message);
+            return `Ошибка ИИ: ${data.error.message}`;
         }
 
         return data.candidates[0].content.parts[0].text;
     } catch (e) {
-        console.error("Gemini Logic Error:", e);
-        return "Ошибка соединения с Google.";
+        console.error("❌ Критическая ошибка:", e.message);
+        return "Произошла ошибка при связи с Google.";
     }
 }
 
-app.get('/', (req, res) => res.send('CyberBot is Live with ADMIN_ID check!'));
-
-// Добавил логирование сообщения админу в консоль
-bot.on('text', async (ctx) => {
-    try {
-        if (!ctx.session) ctx.session = { h: [] };
-        
-        // Пример использования ADMIN_ID: логировать запросы от владельца отдельно
-        if (ctx.from.id.toString() === ADMIN_ID) {
-            console.log(`Админ ${ADMIN_ID} прислал сообщение: ${ctx.message.text}`);
-        }
-
-        const answer = await askGemini(ctx.message.text, null, ctx.session.h);
-        const cleanAnswer = answer.replace(/[*#`_~]/g, "").trim();
-        
-        ctx.reply(cleanAnswer);
-        
-        ctx.session.h.push({ className: "user", text: ctx.message.text });
-        ctx.session.h.push({ className: "assistant", text: cleanAnswer });
-    } catch (e) { console.log("TG Text Error:", e); }
-});
+// Маршруты
+app.get('/', (req, res) => res.send('CyberBot is Running on Gemini 1.5!'));
 
 app.post('/chat', async (req, res) => {
     try {
         const { text, image, history } = req.body;
-        const cleanImage = image ? image.replace(/^data:image\/\w+;base64,/, "") : null;
-        const answer = await askGemini(text, cleanImage, history);
+        const answer = await askGemini(text, image, history);
         res.json({ text: answer.replace(/[*#`_~]/g, "").trim() });
-    } catch (e) {
-        res.status(500).json({ text: "Ошибка сервера" });
-    }
+    } catch (e) { res.status(500).json({ text: "Ошибка сервера" }); }
 });
 
-const PORT = process.env.PORT || 3000;
+bot.on('text', async (ctx) => {
+    try {
+        if (!ctx.session) ctx.session = { h: [] };
+        const answer = await askGemini(ctx.message.text, null, ctx.session.h);
+        const cleanAnswer = answer.replace(/[*#`_~]/g, "").trim();
+        ctx.reply(cleanAnswer);
+        ctx.session.h.push({ className: "user", text: ctx.message.text }, { className: "assistant", text: cleanAnswer });
+    } catch (e) { console.log("TG Error:", e.message); }
+});
+
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-    console.log(`🚀 Сервер запущен. Админ ID: ${ADMIN_ID || 'не задан'}`);
-    bot.launch().catch(err => console.error("TG Start Error:", err));
+    console.log(`🚀 Бот запущен на порту ${PORT}`);
+    bot.launch();
 });
