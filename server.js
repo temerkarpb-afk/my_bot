@@ -10,7 +10,7 @@ app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname))); 
 
-const GROQ_KEY = "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";
+const KIMI_KEY = "sk-apabbB7cauCvMQeLDfrKm1wZNc6Cw8UAW416iTiGOtXR3VUa";
 const TG_TOKEN = "7763435522:AAHeXH2LYp0r6lrhpvODuw8-3JXW1maYDdE";
 const ADMIN_ID = "6884407224";
 
@@ -71,4 +71,5 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Работаем на порту ${PORT}`);
     bot.launch().catch(() => console.log("Бот уже запущен."));
 });
+
 
