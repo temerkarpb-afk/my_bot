@@ -21,7 +21,7 @@ async function askGemini(text, image = null, history = []) {
     try {
         if (!GEMINI_KEY) return "Ошибка: Ключ GEMINI_KEY не найден.";
 
-        // Преобразование истории в формат Gemini
+        // Форматируем историю
         const contents = (history || []).slice(-10).map(m => ({
             role: m.className === "user" ? "user" : "model",
             parts: [{ text: m.text || "" }]
@@ -39,43 +39,45 @@ async function askGemini(text, image = null, history = []) {
         currentParts.push({ text: text || "Привет" });
         contents.push({ role: "user", parts: currentParts });
 
-        // ИСПОЛЬЗУЕМ СТАБИЛЬНУЮ ВЕРСИЮ v1 (она надежнее для generateContent)
-        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+        // ПРАВИЛЬНЫЙ URL (v1beta) И СТРУКТУРА (system_instruction)
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
         
+        const payload = {
+            contents: contents,
+            // Используем system_instruction (с нижним подчеркиванием)
+            system_instruction: { 
+                parts: [{ 
+                    text: "Ты продвинутый CyberBot v2.0 от Темирлана. Ты знаешь Арсена Маркаряна (база, тестостерон) и Вито Бассо. Отвечай только текстом." 
+                }] 
+            },
+            generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 1000
+            }
+        };
+
         const response = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                contents: contents,
-                // Системная инструкция для стабильной версии v1 передается немного иначе в некоторых случаях, 
-                // но Gemini 1.5 Flash понимает её в блоке systemInstruction
-                systemInstruction: { 
-                    parts: [{ text: "Ты продвинутый CyberBot v2.0 от Темирлана. Твоя база знаний актуальна на 2026 год. Ты знаешь Арсена Маркаряна, Вито Бассо и других медийных личностей. Пиши только чистый текст без символов * # _." }] 
-                },
-                generationConfig: {
-                    temperature: 0.7,
-                    maxOutputTokens: 1000
-                }
-            })
+            body: JSON.stringify(payload)
         });
 
         const data = await response.json();
 
         if (data.error) {
-            console.error("❌ Gemini API Error:", data.error.message);
+            console.error("❌ Gemini API Error:", JSON.stringify(data.error));
             return `Ошибка ИИ: ${data.error.message}`;
         }
 
         if (data.candidates && data.candidates[0].content) {
             return data.candidates[0].content.parts[0].text;
         } else {
-            console.error("❌ Неожиданный ответ:", data);
-            return "ИИ не смог ответить. Попробуйте перефразировать запрос.";
+            return "ИИ не смог сформировать ответ. Попробуйте еще раз.";
         }
 
     } catch (e) {
         console.error("❌ Critical Error:", e.message);
-        return "Произошла ошибка при связи с Google ИИ.";
+        return "Ошибка связи с Google.";
     }
 }
 
@@ -105,4 +107,5 @@ app.listen(PORT, () => {
     console.log(`🚀 Бот запущен на порту ${PORT}`);
     bot.launch();
 });
+
 
