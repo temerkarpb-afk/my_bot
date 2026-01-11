@@ -16,23 +16,51 @@ bot.use(session());
 app.use(express.static(path.join(__dirname)));
 
 async function askGemini(text, history = []) {
-    try {
-        // Используем 1.5 Flash - она САМАЯ стабильная и бесплатная на сегодня
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
-        
-        const response = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                contents: [{ role: "user", parts: [{ text: "Ты CyberBot v2.0 созданный Темирланом. Отвечай кратко.\n\n" + text }] }]
-            })
-        });
+    // Список моделей: сначала пробуем Gemini 3, если нет - 1.5 Flash
+    const modelOptions = ["gemini-3-pro-preview", "gemini-1.5-flash"];
+    
+    for (const modelId of modelOptions) {
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${GEMINI_KEY}`;
+            const response = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [{ 
+                        role: "user", 
+                        parts: [{ text: "Ты CyberBot v3.0 от Темирлана. Знаешь базу Арсена Маркаряна. Отвечай кратко.\n\n" + text }] 
+                    }]
+                })
+            });
 
-        const data = await response.json();
-        return data.candidates ? data.candidates[0].content.parts[0].text : "Ошибка ИИ";
-    } catch (e) { return "Ошибка связи."; }
+            const data = await response.json();
+
+            // Если квота превышена или модель не найдена — пробуем следующую
+            if (data.error && (data.error.message.includes("quota") || data.error.message.includes("not found"))) {
+                console.warn(`⚠️ Модель ${modelId} недоступна, пробую запасную...`);
+                continue; 
+            }
+
+            if (data.candidates) {
+                return data.candidates[0].content.parts[0].text;
+            }
+        } catch (e) {
+            console.error("Ошибка запроса:", e.message);
+        }
+    }
+    return "Все линии ИИ сейчас заняты. Попробуй через минуту.";
 }
 
+// ЭТОТ БЛОК УБИРАЕТ 404
+app.post('/chat', async (req, res) => {
+    try {
+        const { text } = req.body;
+        const answer = await askGemini(text);
+        res.json({ text: answer });
+    } catch (err) {
+        res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
 // ЭТОТ ПУТЬ ДОЛЖЕН БЫТЬ ТУТ:
 app.post('https://my-bot-zbgv.onrender.com/chat', async (req, res) => {
     const { text, history } = req.body;
@@ -47,5 +75,6 @@ app.listen(PORT, () => {
     console.log(`🚀 Работаем на порту ${PORT}`);
     bot.launch();
 });
+
 
 
