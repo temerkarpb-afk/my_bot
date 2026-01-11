@@ -250,13 +250,12 @@ async function sendMessage() {
 
     try {
 
-        const response = await fetch('https://my-bot-zbgv.onrender.com/chat', {
-
-            method: "POST",
-
-            headers: { "Content-Type": "application/json" },
-
-            body: JSON.stringify({
+       // Если ты запускаешь сайт на Render, лучше использовать относительный путь:
+const response = await fetch('/chat', { 
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: userInput, history: chatHistory })
+});
 
                 text: text,
 
@@ -422,6 +421,7 @@ document.getElementById('imageModal').onclick = function() {
 
 
 };
+
 
 
 
