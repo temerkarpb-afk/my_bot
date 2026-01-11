@@ -18,66 +18,60 @@ bot.use(session());
 app.use(express.static(path.join(__dirname)));
 
 async function askGemini(text, image = null, history = []) {
-    try {
-        if (!GEMINI_KEY) return "Ошибка: Добавь GEMINI_KEY в настройки Render.";
+    // Список моделей по приоритету: сначала самая новая 2.0, потом стабильная 1.5
+    const models = ["gemini-2.0-flash-exp", "gemini-1.5-flash"];
+    
+    for (let modelName of models) {
+        try {
+            if (!GEMINI_KEY) return "Ошибка: Настройте GEMINI_KEY.";
 
-        const contents = (history || []).slice(-10).map(m => ({
-            role: m.className === "user" ? "user" : "model",
-            parts: [{ text: m.text || "" }]
-        }));
+            const contents = (history || []).slice(-10).map(m => ({
+                role: m.className === "user" ? "user" : "model",
+                parts: [{ text: m.text || "" }]
+            }));
 
-        let currentParts = [];
-        // Вшиваем инструкцию прямо в запрос
-        const systemPrompt = "Ты CyberBot v2.0 от Темирлана. Твоя база знаний — 2026 год. Ты знаешь всё про Арсена Маркаряна и Вито Бассо. Отвечай только текстом без форматирования.\n\n";
-        
-        if (image) {
-            currentParts.push({
-                inline_data: {
-                    mime_type: "image/jpeg",
-                    data: image.replace(/^data:image\/\w+;base64,/, "")
-                }
+            let currentParts = [];
+            const systemPrompt = "Ты CyberBot v2.0 от Темирлана. Знаешь всё про Арсена Маркаряна и Вито Бассо. Отвечай только текстом.\n\n";
+            
+            if (image) {
+                currentParts.push({
+                    inline_data: {
+                        mime_type: "image/jpeg",
+                        data: image.replace(/^data:image\/\w+;base64,/, "")
+                    }
+                });
+            }
+            currentParts.push({ text: systemPrompt + (text || "Привет") });
+            contents.push({ role: "user", parts: currentParts });
+
+            // Пробуем текущую модель из списка
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_KEY}`;
+            
+            const response = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ contents: contents })
             });
+
+            const data = await response.json();
+
+            // Если модель не найдена, переходим к следующей в списке
+            if (data.error && (data.error.status === "NOT_FOUND" || data.error.message.includes("not found"))) {
+                console.log(`⚠️ Модель ${modelName} не найдена, пробуем следующую...`);
+                continue; 
+            }
+
+            if (data.error) return `Ошибка ИИ: ${data.error.message}`;
+
+            if (data.candidates && data.candidates[0].content) {
+                return data.candidates[0].content.parts[0].text;
+            }
+        } catch (e) {
+            console.error(`❌ Ошибка с моделью ${modelName}:`, e.message);
         }
-        
-        currentParts.push({ text: systemPrompt + (text || "Привет") });
-        contents.push({ role: "user", parts: currentParts });
-
-        // Используем ТВОЮ новую модель и v1beta (для preview моделей это обязательно)
-        const modelName = "gemini-2.5-flash-native-audio-preview-12-2025";
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_KEY}`;
-        
-        const response = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                contents: contents,
-                generationConfig: {
-                    temperature: 0.7,
-                    maxOutputTokens: 1024
-                }
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.error) {
-            console.error("❌ Gemini API Error:", data.error.message);
-            // Если модель совсем новая и её еще нет в этом регионе, попробуем 1.5 Flash как запасной вариант
-            return `Ошибка ИИ (${modelName}): ${data.error.message}`;
-        }
-
-        if (data.candidates && data.candidates[0].content) {
-            return data.candidates[0].content.parts[0].text;
-        } else {
-            return "ИИ не смог ответить. Возможно, запрос слишком сложный.";
-        }
-
-    } catch (e) {
-        console.error("❌ Critical Error:", e.message);
-        return "Ошибка связи с сервером Google.";
     }
+    return "К сожалению, ни одна модель ИИ сейчас не доступна.";
 }
-
 app.get('/', (req, res) => res.send('CyberBot v2.0 (Gemini 2.5) is Live!'));
 
 app.post('/chat', async (req, res) => {
@@ -103,3 +97,4 @@ app.listen(PORT, () => {
     console.log(`🚀 Бот на Gemini 2.5 запущен!`);
     bot.launch().catch(err => console.log("TG Launch Error:", err));
 });
+
