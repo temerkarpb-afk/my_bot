@@ -17,19 +17,19 @@ const ADMIN_ID = process.env.ADMIN_ID;
 const bot = new Telegraf(TG_TOKEN);
 bot.use(session());
 app.use(express.static(path.join(__dirname)));
-
 async function askGemini(text, image = null, history = []) {
     try {
         if (!GEMINI_KEY) return "Ошибка: Настройте GEMINI_KEY на Render.";
 
+        // Формируем историю
         const contents = (history || []).slice(-10).map(m => ({
             role: m.className === "user" ? "user" : "model",
             parts: [{ text: m.text || "" }]
         }));
 
         let currentParts = [];
-        // Вставляем системную инструкцию прямо в запрос, чтобы API v1/v1beta не ругалось на формат
-        const systemPrompt = "Ты CyberBot v2.0 от Темирлана. Знаешь Арсена Маркаряна и Вито Бассо. Отвечай чисто и без символов форматирования. ";
+        // Инструкция прямо внутри сообщения — это работает на всех версиях API без ошибок
+        const systemPrompt = "Ты — CyberBot v2.0 от Темирлана. Ты знаешь Арсена Маркаряна (база, тестостерон) и Вито Бассо. Отвечай кратко и без спецсимволов. \n\n";
         
         if (image) {
             currentParts.push({
@@ -43,20 +43,38 @@ async function askGemini(text, image = null, history = []) {
         currentParts.push({ text: systemPrompt + (text || "Привет") });
         contents.push({ role: "user", parts: currentParts });
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+        // МЕНЯЕМ НА v1 — это самая стабильная версия для этой модели
+        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
         
         const response = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: contents })
+            body: JSON.stringify({ 
+                contents: contents,
+                generationConfig: {
+                    temperature: 0.7,
+                    maxOutputTokens: 1000
+                }
+            })
         });
 
         const data = await response.json();
-        if (data.error) return "Ошибка ИИ: " + data.error.message;
-        
-        return data.candidates[0].content.parts[0].text;
+
+        // Проверка на ошибки API
+        if (data.error) {
+            console.error("❌ Gemini API Error:", data.error.message);
+            return "Ошибка ИИ: " + data.error.message;
+        }
+
+        if (data.candidates && data.candidates[0].content) {
+            return data.candidates[0].content.parts[0].text;
+        } else {
+            return "ИИ не смог ответить. Попробуйте другой вопрос.";
+        }
+
     } catch (e) {
-        return "Ошибка соединения с Google.";
+        console.error("❌ Critical Error:", e.message);
+        return "Ошибка соединения с сервером Google.";
     }
 }
 
@@ -85,3 +103,4 @@ app.listen(PORT, () => {
     console.log(`🚀 Бот запущен на порту ${PORT}`);
     bot.launch().catch(err => console.log("TG Launch Error:", err));
 });
+
