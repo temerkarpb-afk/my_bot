@@ -60,7 +60,7 @@ async function askAI(text, image = null, history = []) {
             method: "POST",
             headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify({
-                model: "meta-llama/llama-guard-4-12b",
+                model: "meta-llama/llama-4-scout-17b-16e-instruct",
                 messages: [{ role: "system", content: "Ты чат-бот по имени Джарвис Твой создатель Темирлан Старк." }, ...messages, { role: "user", content: text || "Привет" }],
                 temperature: 0.6
             })
@@ -101,5 +101,6 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Сервер запущен на порту ${PORT}`);
     bot.launch().catch(() => {});
 });
+
 
 
