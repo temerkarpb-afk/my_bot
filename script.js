@@ -104,7 +104,6 @@ function deleteChat(id) {
     else updateHistoryUI();
 }
 
-// --- 3. ОТПРАВКА С АНИМАЦИЕЙ ---
 async function sendMessage() {
     const text = input.value.trim();
     if (!text && !selectedImageBase64) return;
@@ -112,21 +111,22 @@ async function sendMessage() {
     const allChats = JSON.parse(localStorage.getItem("allChats")) || {};
     const chatHistory = allChats[currentChatId] || [];
 
-    // СОХРАНЯЕМ ФОТО В ИСТОРИЮ ПЕРЕД ОТПРАВКОЙ
-    if (selectedImageBase64) {
-        renderMessage("Вы", selectedImageBase64, "user", true);
-        chatHistory.push({ author: "Вы", text: "IMAGEDATA:" + selectedImageBase64, className: "user" });
+    // Создаем временную копию фото, чтобы очистить переменную сразу
+    const imgToSend = selectedImageBase64;
+
+    if (imgToSend) {
+        renderMessage("Вы", imgToSend, "user", true);
+        // Сохраняем в историю специальную метку
+        chatHistory.push({ author: "Вы", text: "IMAGEDATA:" + imgToSend, className: "user" });
     }
     if (text) {
         renderMessage("Вы", text, "user", false);
         chatHistory.push({ author: "Вы", text: text, className: "user" });
     }
 
-    const tempImg = selectedImageBase64;
     input.value = "";
-    selectedImageBase64 = null;
+    selectedImageBase64 = null; // Очищаем после копирования в imgToSend
     
-    // ВКЛЮЧАЕМ АНИМАЦИЮ
     if (typingBox) typingBox.style.display = "flex";
 
     try {
@@ -134,18 +134,16 @@ async function sendMessage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                text: text,
-                image: tempImg, // Отправляем картинку на сервер
-                history: chatHistory.map(m => ({
+                text: text || "Что на этом фото?", 
+                image: imgToSend, // Прямая передача картинки
+                history: chatHistory.slice(-6).map(m => ({
                     className: m.className,
-                    text: m.text.startsWith("IMAGEDATA:") ? "[Изображение]" : m.text
+                    text: m.text.startsWith("IMAGEDATA:") ? "[Пользователь прислал изображение]" : m.text
                 }))
             })
         });
 
         const data = await response.json();
-        
-        // ВЫКЛЮЧАЕМ АНИМАЦИЮ
         if (typingBox) typingBox.style.display = "none";
 
         renderMessage("CyberBot", data.text, "bot");
@@ -157,10 +155,9 @@ async function sendMessage() {
         
     } catch (e) {
         if (typingBox) typingBox.style.display = "none";
-        renderMessage("CyberBot", "❌ Ошибка сервера.", "bot");
+        renderMessage("CyberBot", "❌ Ошибка соединения", "bot");
     }
 }
-
 // --- 4. СОБЫТИЯ ---
 sendBtn.onclick = sendMessage;
 newChatBtn.onclick = createNewChat;
@@ -199,3 +196,4 @@ if (modal) {
 // Старт
 if (!currentChatId) createNewChat();
 else loadChat(currentChatId);
+
