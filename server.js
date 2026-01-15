@@ -24,22 +24,25 @@ function formatResponse(text) {
     return text.replace(/[*#`_~]/g, "").trim();
 }
 
-// ОСНОВНАЯ ФУНКЦИЯ С ЗАПАСКОЙ
 async function askAI(text, image = null, history = []) {
-    // Чистим историю, чтобы не передавать лишние метки [Фото] внутрь контекста
     const messages = (history || []).slice(-8).map(m => ({
         role: m.className === "user" ? "user" : "assistant",
         content: m.text
     }));
 
-    // --- 1. ПОПЫТКА ЧЕРЕЗ MOONSHOT (KIMI) ---
     try {
         let userContent;
         if (image) {
-            // Формируем контент для Vision модели
+            // МАКСИМАЛЬНО ЯВНЫЙ ФОРМАТ ДЛЯ VISION
             userContent = [
-                { type: "text", text: text || "Что на фото?" },
-                { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } }
+                { 
+                    type: "text", 
+                    text: text || "Пожалуйста, посмотри на это изображение и опиши, что ты видишь." 
+                },
+                { 
+                    type: "image_url", 
+                    image_url: { url: `data:image/jpeg;base64,${image}` } 
+                }
             ];
         } else {
             userContent = text || "Привет";
@@ -51,7 +54,10 @@ async function askAI(text, image = null, history = []) {
             body: JSON.stringify({
                 model: "kimi-k2-instruct-0905",
                 messages: [
-                    { role: "system", content: "Ты CyberBot v3.0 от Темирлана." }, 
+                    { 
+                        role: "system", 
+                        content: "Ты CyberBot v3.0. Твой создатель Темирлан. ТЫ ОБЛАДАЕШЬ ЗРЕНИЕМ и можешь анализировать изображения, которые присылает пользователь." 
+                    }, 
                     ...messages, 
                     { role: "user", content: userContent }
                 ],
@@ -61,14 +67,11 @@ async function askAI(text, image = null, history = []) {
         
         const data = await response.json();
         if (data.choices && data.choices[0]) return data.choices[0].message.content;
-        
-        if (data.error) console.log("Kimi API Error:", data.error.message);
-        console.log("Kimi не ответил, переключаюсь на Groq...");
     } catch (e) {
-        console.log("Ошибка Kimi, пробую Groq...");
+        console.log("Ошибка основной модели...");
     }
 
-    // --- 2. ЗАПАСКА: GROQ (ТВОЯ МОДЕЛЬ И ТЕКСТ) ---
+    // ЗАПАСКА (Оставляем твою модель Groq без изменений)
     try {
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
@@ -86,10 +89,9 @@ async function askAI(text, image = null, history = []) {
         const data = await response.json();
         return data.choices[0].message.content;
     } catch (e) {
-        return "Ошибка всех нейросетей. Проверьте баланс или API ключи.";
+        return "Ошибка всех нейросетей.";
     }
 }
-
 // ЭНДПОИНТ ДЛЯ САЙТА
 app.post('/chat', async (req, res) => {
     try {
@@ -119,3 +121,4 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Сервер запущен на порту ${PORT}`);
     bot.launch().catch(() => {});
 });
+
