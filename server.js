@@ -26,6 +26,7 @@ function formatResponse(text) {
 
 // ОСНОВНАЯ ФУНКЦИЯ С ЗАПАСКОЙ
 async function askAI(text, image = null, history = []) {
+    // Чистим историю, чтобы не передавать лишние метки [Фото] внутрь контекста
     const messages = (history || []).slice(-8).map(m => ({
         role: m.className === "user" ? "user" : "assistant",
         content: m.text
@@ -33,35 +34,52 @@ async function askAI(text, image = null, history = []) {
 
     // --- 1. ПОПЫТКА ЧЕРЕЗ MOONSHOT (KIMI) ---
     try {
-        let userContent = image ? [
-            { type: "text", text: text || "Что на фото?" },
-            { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } }
-        ] : text || "Привет";
+        let userContent;
+        if (image) {
+            // Формируем контент для Vision модели
+            userContent = [
+                { type: "text", text: text || "Что на фото?" },
+                { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } }
+            ];
+        } else {
+            userContent = text || "Привет";
+        }
 
         const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
             method: "POST",
             headers: { "Authorization": `Bearer ${MOONSHOT_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify({
                 model: "kimi-k2-instruct-0905",
-                messages: [{ role: "system", content: "Ты CyberBot v3.0 от Темирлана." }, ...messages, { role: "user", content: userContent }],
+                messages: [
+                    { role: "system", content: "Ты CyberBot v3.0 от Темирлана." }, 
+                    ...messages, 
+                    { role: "user", content: userContent }
+                ],
                 temperature: 0.3
             })
         });
+        
         const data = await response.json();
         if (data.choices && data.choices[0]) return data.choices[0].message.content;
+        
+        if (data.error) console.log("Kimi API Error:", data.error.message);
         console.log("Kimi не ответил, переключаюсь на Groq...");
     } catch (e) {
         console.log("Ошибка Kimi, пробую Groq...");
     }
 
-    // --- 2. ЗАПАСКА: GROQ (LLAMA 3.3) ---
+    // --- 2. ЗАПАСКА: GROQ (ТВОЯ МОДЕЛЬ И ТЕКСТ) ---
     try {
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
             headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify({
                 model: "meta-llama/llama-4-scout-17b-16e-instruct",
-                messages: [{ role: "system", content: "Ты чат-бот по имени Джарвис Твой создатель Темирлан Старк." }, ...messages, { role: "user", content: text || "Привет" }],
+                messages: [
+                    { role: "system", content: "Ты чат-бот по имени Джарвис Твой создатель Темирлан Старк." }, 
+                    ...messages, 
+                    { role: "user", content: text || "Привет" }
+                ],
                 temperature: 0.6
             })
         });
@@ -101,8 +119,3 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Сервер запущен на порту ${PORT}`);
     bot.launch().catch(() => {});
 });
-
-
-
-
-
