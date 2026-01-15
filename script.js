@@ -18,13 +18,29 @@ function renderMessage(author, text, className, isImage = false) {
     div.className = `message ${className} animate-fade-in`; 
     
     if (isImage) {
-        div.innerHTML = `<strong>${author}:</strong><br><img src="data:image/jpeg;base64,${text}" class="chat-img" onclick="openImage(this.src)">`;
+        // Добавлен класс chat-img для стилей и onclick для просмотра
+        div.innerHTML = `<strong>${author}:</strong><br><img src="data:image/jpeg;base64,${text}" class="chat-img" style="max-width:250px; cursor:pointer; border-radius:10px; margin-top:5px;" onclick="openImage(this.src)">`;
     } else {
         div.innerHTML = `<strong>${author}:</strong> ${text}`;
     }
     
     messagesContainer.appendChild(div);
     messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' });
+}
+
+// --- НОВОЕ: ФУНКЦИЯ ПРОСМОТРА ИЗОБРАЖЕНИЙ ---
+function openImage(src) {
+    let modal = document.getElementById('imageModal');
+    let modalImg = document.getElementById('modalImg');
+    
+    // Если элементов модалки нет в HTML, мы их не трогаем, но функция готова
+    if (modal && modalImg) {
+        modal.style.display = "flex";
+        modalImg.src = src;
+    } else {
+        // Альтернативный вариант, если нет модалки — открыть в новой вкладке
+        window.open(src, '_blank');
+    }
 }
 
 // --- 2. ЛОГИКА ИСТОРИИ (КЛИКАБЕЛЬНОСТЬ) ---
@@ -96,6 +112,7 @@ async function sendMessage() {
     const allChats = JSON.parse(localStorage.getItem("allChats")) || {};
     const chatHistory = allChats[currentChatId] || [];
 
+    // СОХРАНЯЕМ ФОТО В ИСТОРИЮ ПЕРЕД ОТПРАВКОЙ
     if (selectedImageBase64) {
         renderMessage("Вы", selectedImageBase64, "user", true);
         chatHistory.push({ author: "Вы", text: "IMAGEDATA:" + selectedImageBase64, className: "user" });
@@ -118,10 +135,10 @@ async function sendMessage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 text: text,
-                image: tempImg,
+                image: tempImg, // Отправляем картинку на сервер
                 history: chatHistory.map(m => ({
                     className: m.className,
-                    text: m.text.startsWith("IMAGEDATA:") ? "[Фото]" : m.text
+                    text: m.text.startsWith("IMAGEDATA:") ? "[Изображение]" : m.text
                 }))
             })
         });
@@ -158,13 +175,26 @@ input.onkeydown = (e) => { if (e.key === "Enter") sendMessage(); };
 
 fileInput.onchange = (e) => {
     const file = e.target.files[0];
+    if (!file) return;
+    
     const reader = new FileReader();
     reader.onload = () => {
         selectedImageBase64 = reader.result.split(',')[1];
-        renderMessage("Система", "🖼 Фото выбрано", "bot");
+        // Подсказка пользователю, что фото готово
+        const notice = document.createElement("div");
+        notice.style.cssText = "color: #25d366; font-size: 12px; text-align: center; margin: 5px;";
+        notice.innerText = "🖼 Фото готово к отправке";
+        messagesContainer.appendChild(notice);
+        messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' });
     };
     reader.readAsDataURL(file);
 };
+
+// Закрытие модалки при клике
+const modal = document.getElementById('imageModal');
+if (modal) {
+    modal.onclick = () => modal.style.display = "none";
+}
 
 // Старт
 if (!currentChatId) createNewChat();
