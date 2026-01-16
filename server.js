@@ -19,30 +19,49 @@ const ADMIN_ID = "6884407224";
 const bot = new Telegraf(TG_TOKEN);
 bot.use(session());
 
+// --- НОВОЕ: МОДУЛЬ ПОИСКА В ИНТЕРНЕТЕ ---
+async function getWebData(query) {
+    try {
+        const searchRes = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`);
+        const data = await searchRes.json();
+        return data.AbstractText || ""; 
+    } catch (e) {
+        return "";
+    }
+}
+
 function formatResponse(text) {
     if (!text) return "";
     return text.replace(/[*#`_~]/g, "").trim();
 }
 
 async function askAI(text, image = null, history = []) {
+    // 1. ПРОВЕРКА АКТУАЛЬНОСТИ (ПОИСК)
+    let extraContext = "";
+    const triggers = ["новости", "сегодня", "курс", "кто такой", "что произошло", "погода", "события"];
+    const needsSearch = triggers.some(word => (text || "").toLowerCase().includes(word));
+    
+    if (needsSearch && !image) {
+        const webInfo = await getWebData(text);
+        if (webInfo) extraContext = `\nСВЕЖАЯ ИНФОРМАЦИЯ ИЗ СЕТИ (2026): ${webInfo}\n`;
+    }
+
     const messages = (history || []).slice(-8).map(m => ({
         role: m.className === "user" ? "user" : "assistant",
         content: m.text
     }));
 
+    // Системная установка с актуальной датой
+    const currentFullDate = "16 января 2026 года";
+    const systemCore = `Ты CyberBot v3.0 (Джарвис). Твой создатель Темирлан. Сегодняшняя дата: ${currentFullDate}. Тебе доступен поиск в реальном времени. ${extraContext}`;
+
+    // --- 1. ПОПЫТКА ЧЕРЕЗ MOONSHOT (KIMI) ---
     try {
         let userContent;
         if (image) {
-            // МАКСИМАЛЬНО ЯВНЫЙ ФОРМАТ ДЛЯ VISION
             userContent = [
-                { 
-                    type: "text", 
-                    text: text || "Пожалуйста, посмотри на это изображение и опиши, что ты видишь." 
-                },
-                { 
-                    type: "image_url", 
-                    image_url: { url: `data:image/jpeg;base64,${image}` } 
-                }
+                { type: "text", text: text || "Пожалуйста, посмотри на это изображение и опиши, что ты видишь." },
+                { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } }
             ];
         } else {
             userContent = text || "Привет";
@@ -54,10 +73,7 @@ async function askAI(text, image = null, history = []) {
             body: JSON.stringify({
                 model: "kimi-k2-instruct-0905",
                 messages: [
-                    { 
-                        role: "system", 
-                        content: "Ты CyberBot v3.0. Твой создатель Темирлан." 
-                    }, 
+                    { role: "system", content: systemCore }, 
                     ...messages, 
                     { role: "user", content: userContent }
                 ],
@@ -71,7 +87,7 @@ async function askAI(text, image = null, history = []) {
         console.log("Ошибка основной модели...");
     }
 
-    // ЗАПАСКА (Оставляем твою модель Groq без изменений)
+    // --- 2. ЗАПАСКА: GROQ (ТВОЯ МОДЕЛЬ) ---
     try {
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
@@ -79,7 +95,7 @@ async function askAI(text, image = null, history = []) {
             body: JSON.stringify({
                 model: "meta-llama/llama-4-scout-17b-16e-instruct",
                 messages: [
-                    { role: "system", content: "Ты чат-бот по имени Джарвис.ТЫ ОБЛАДАЕШЬ ЗРЕНИЕМ и можешь анализировать изображения, которые присылает пользователь" }, 
+                    { role: "system", content: systemCore + " ТЫ ОБЛАДАЕШЬ ЗРЕНИЕМ." }, 
                     ...messages, 
                     { role: "user", content: text || "Привет" }
                 ],
@@ -89,17 +105,15 @@ async function askAI(text, image = null, history = []) {
         const data = await response.json();
         return data.choices[0].message.content;
     } catch (e) {
-        return "Ошибка всех нейросетей.";
+        return "Ошибка всех нейросетей. Попробуйте позже.";
     }
 }
+
 // ЭНДПОИНТ ДЛЯ САЙТА
 app.post('/chat', async (req, res) => {
     try {
         const { text, image, history } = req.body;
-        
-        // Уведомление админу в ТГ (Сайт)
         bot.telegram.sendMessage(ADMIN_ID, `🌐 Сайт: ${text || "[Фото]"}`).catch(()=>{});
-        
         const answer = await askAI(text, image, history);
         res.json({ text: formatResponse(answer) });
     } catch (e) {
@@ -118,27 +132,6 @@ bot.on('text', async (ctx) => {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Сервер запущен на порту ${PORT}`);
+    console.log(`🚀 Сервер Джарвиса запущен (Версия 2026) на порту ${PORT}`);
     bot.launch().catch(() => {});
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
