@@ -53,7 +53,7 @@ async function askAI(text, image = null, history = []) {
 
     // Системная установка с актуальной датой
     const currentFullDate = "16 января 2026 года";
-    const systemCore = `Ты CyberBot v3.0 (Джарвис). Твой создатель Темирлан. Сегодняшняя дата: ${currentFullDate}. Тебе доступен поиск в реальном времени. ${extraContext}`;
+    const systemCore = `Ты чат бот Джарвис. Сегодняшняя дата: ${currentFullDate}. Тебе доступен поиск в реальном времени. ${extraContext}`;
 
     // --- 1. ПОПЫТКА ЧЕРЕЗ MOONSHOT (KIMI) ---
     try {
@@ -71,7 +71,7 @@ async function askAI(text, image = null, history = []) {
             method: "POST",
             headers: { "Authorization": `Bearer ${MOONSHOT_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify({
-                model: "kimi-k2-instruct-0905",
+                model: "moonshotai/kimi-k2-instruct-0905",
                 messages: [
                     { role: "system", content: systemCore }, 
                     ...messages, 
@@ -135,3 +135,4 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Сервер Джарвиса запущен (Версия 2026) на порту ${PORT}`);
     bot.launch().catch(() => {});
 });
+
