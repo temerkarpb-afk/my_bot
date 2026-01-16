@@ -197,3 +197,7 @@ if (modal) {
 if (!currentChatId) createNewChat();
 else loadChat(currentChatId);
 
+const currentTime = new Date().getTime();
+console.log(currentTime);
+
+
