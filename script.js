@@ -111,12 +111,16 @@ async function sendMessage() {
     const allChats = JSON.parse(localStorage.getItem("allChats")) || {};
     const chatHistory = allChats[currentChatId] || [];
 
-    // Создаем временную копию фото, чтобы очистить переменную сразу
+    // --- НОВОЕ: ОПРЕДЕЛЕНИЕ ВРЕМЕНИ ---
+    const now = new Date();
+    const currentTime = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    const currentDate = now.toLocaleDateString('ru-RU');
+    // ---------------------------------
+
     const imgToSend = selectedImageBase64;
 
     if (imgToSend) {
         renderMessage("Вы", imgToSend, "user", true);
-        // Сохраняем в историю специальную метку
         chatHistory.push({ author: "Вы", text: "IMAGEDATA:" + imgToSend, className: "user" });
     }
     if (text) {
@@ -125,7 +129,7 @@ async function sendMessage() {
     }
 
     input.value = "";
-    selectedImageBase64 = null; // Очищаем после копирования в imgToSend
+    selectedImageBase64 = null;
     
     if (typingBox) typingBox.style.display = "flex";
 
@@ -134,11 +138,12 @@ async function sendMessage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                text: text || "Что на этом фото?", 
-                image: imgToSend, // Прямая передача картинки
+                // Добавляем время в текст запроса, чтобы Джарвис его знал
+                text: `(Системное время: ${currentDate}, ${currentTime}) ${text || "Что на фото?"}`, 
+                image: imgToSend,
                 history: chatHistory.slice(-6).map(m => ({
                     className: m.className,
-                    text: m.text.startsWith("IMAGEDATA:") ? "[Пользователь прислал изображение]" : m.text
+                    text: m.text.startsWith("IMAGEDATA:") ? "[Изображение]" : m.text
                 }))
             })
         });
@@ -199,5 +204,6 @@ else loadChat(currentChatId);
 
 const currentTime = new Date().getTime();
 console.log(currentTime);
+
 
 
