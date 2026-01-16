@@ -12,7 +12,7 @@ app.use(express.static(path.join(__dirname)));
 
 // --- ТВОИ КЛЮЧИ ---
 const GROQ_KEY = "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";
-const TAVILY_KEY = "ТВОЙ_КЛЮЧ_TAVILY"; // Получи ключ на tavily.com
+const TAVILY_KEY = "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"; 
 const TG_TOKEN = "8538917490:AAF1DQ7oVWHlR9EuodCq8QNbDEBlB_MX9Ac";
 const ADMIN_ID = "6884407224";
 
@@ -155,3 +155,4 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Джарвис Онлайн. Память: 40 реплик. Системы активны.`);
     bot.launch().catch(() => {});
 });
+
