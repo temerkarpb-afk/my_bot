@@ -19,20 +19,21 @@ const ADMIN_ID = "6884407224";
 const bot = new Telegraf(TG_TOKEN);
 bot.use(session());
 
-// --- СПОСОБ №2: УЛУЧШЕННЫЙ ПОИСК (Google Search Context) ---
+// --- УЛУЧШЕННЫЙ ПОИСК (СПОСОБ №3: СТРУКТУРИРОВАННЫЕ ДАННЫЕ) ---
 async function getWebData(query) {
     try {
-        // Используем сервис поиска через прокси-запрос
-        const searchUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://google.com/search?q=${query}`)}`;
-        const response = await fetch(searchUrl);
+        const response = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`);
         const data = await response.json();
         
-        // Вырезаем текстовые куски (сниппеты) из HTML ответа
-        const html = data.contents;
-        const snippets = html.match(/<div class="BNeawe s3v9rd AP7Wnd">.*?<\/div>/g) || [];
-        return snippets.slice(0, 3).map(s => s.replace(/<[^>]*>/g, '')).join(' ');
+        let info = "";
+        if (data.AbstractText) info = data.AbstractText;
+        else if (data.RelatedTopics && data.RelatedTopics.length > 0) {
+            info = data.RelatedTopics.slice(0, 3).map(t => t.Text).join(" | ");
+        }
+        
+        return info || "Актуальные данные в процессе обновления...";
     } catch (e) {
-        console.log("Ошибка поиска Способ 2");
+        console.log("Ошибка поиска v3");
         return "";
     }
 }
@@ -43,21 +44,21 @@ function formatResponse(text) {
 }
 
 async function askAI(text, image = null, history = []) {
-    // АВТОМАТИЧЕСКАЯ ДАТА
+    // ДИНАМИЧЕСКАЯ ДАТА (Всегда актуально)
     const now = new Date();
     const currentDateTime = now.toLocaleString('ru-RU', { timeZone: 'Asia/Almaty' });
 
     let internetContext = "";
     const lowerText = (text || "").toLowerCase();
     
-    // Список слов, заставляющих Джарвиса лезть в сеть
-    const searchTriggers = ["новости", "сегодня", "курс", "кто такой", "погода", "результат", "события"];
+    // Триггеры для выхода в интернет
+    const triggers = ["новости", "сегодня", "курс", "кто такой", "погода", "результат", "события", "президент", "цена"];
     
-    if (searchTriggers.some(t => lowerText.includes(t)) && !image) {
-        console.log("Джарвис ищет в Google...");
-        const rawSearch = await getWebData(text);
-        if (rawSearch) {
-            internetContext = `\nОБНОВЛЕНИЕ ДАННЫХ ИЗ ИНТЕРНЕТА (РЕАЛЬНОЕ ВРЕМЯ): ${rawSearch}\n`;
+    if (triggers.some(t => lowerText.includes(t)) && !image) {
+        console.log("Джарвис анализирует сеть...");
+        const searchResult = await getWebData(text);
+        if (searchResult) {
+            internetContext = `\n[АКТУАЛЬНЫЕ ДАННЫЕ ИЗ СЕТИ НА ${currentDateTime}]: ${searchResult}\n`;
         }
     }
 
@@ -66,18 +67,19 @@ async function askAI(text, image = null, history = []) {
         content: m.text
     }));
 
-    // Ультимативный системный промпт
-    const systemInstruction = `Ты — Джарвис, ИИ, созданный Темирланом Старком. 
-    ТЕКУЩЕЕ ВРЕМЯ И ДАТА: ${currentDateTime}.
-    Твоя база знаний обновлена. Если предоставлен 'ОБНОВЛЕНИЕ ДАННЫХ', используй его как приоритет.
-    Никогда не говори, что ты ограничен 2023 годом. Ты находишься в 2026 году.`;
+    // Ультимативный системный промпт против галлюцинаций
+    const systemInstruction = `Ты — Джарвис, ИИ Темирлана Старка. 
+    СЕГОДНЯ: ${currentDateTime}. 
+    ВНИМАНИЕ: Если ниже предоставлены 'АКТУАЛЬНЫЕ ДАННЫЕ', используй ТОЛЬКО их для ответа на вопросы о текущих событиях. 
+    Никогда не выдумывай новости прошлых лет (например, про COVID или старые выборы). 
+    Если информации нет, отвечай исходя из того, что сейчас январь 2026 года.`;
 
     // --- 1. MOONSHOT (KIMI) ---
     try {
         let userContent = image ? [
-            { type: "text", text: text || "Опиши изображение." },
+            { type: "text", text: text || "Что на фото?" },
             { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } }
-        ] : (text + internetContext);
+        ] : (internetContext + (text || "Привет"));
 
         const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
             method: "POST",
@@ -91,10 +93,10 @@ async function askAI(text, image = null, history = []) {
         const data = await response.json();
         if (data.choices && data.choices[0]) return data.choices[0].message.content;
     } catch (e) {
-        console.log("Kimi упал...");
+        console.log("Kimi Mode Error");
     }
 
-    // --- 2. GROQ ЗАПАСКА ---
+    // --- 2. GROQ ЗАПАСКА (Llama 4 Scout) ---
     try {
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
@@ -102,9 +104,9 @@ async function askAI(text, image = null, history = []) {
             body: JSON.stringify({
                 model: "meta-llama/llama-4-scout-17b-16e-instruct",
                 messages: [
-                    { role: "system", content: systemInstruction + " ТЫ ВИДИШЬ КАРТИНКИ." }, 
+                    { role: "system", content: systemInstruction + " Ты также обладаешь зрением." }, 
                     ...messages, 
-                    { role: "user", content: (text + internetContext) || "Привет" }
+                    { role: "user", content: (internetContext + (text || "Привет")) }
                 ],
                 temperature: 0.6
             })
@@ -112,11 +114,11 @@ async function askAI(text, image = null, history = []) {
         const data = await response.json();
         return data.choices[0].message.content;
     } catch (e) {
-        return "Сэр, возникла критическая ошибка связи с серверами Stark Industries.";
+        return "Сэр, возникли помехи в канале связи Stark Industries. Попробуйте снова.";
     }
 }
 
-// ЭНДПОИНТЫ (Оставляем без изменений)
+// ЭНДПОИНТЫ
 app.post('/chat', async (req, res) => {
     try {
         const { text, image, history } = req.body;
@@ -138,6 +140,6 @@ bot.on('text', async (ctx) => {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Jarvis Online | Port: ${PORT}`);
+    console.log(`🚀 Jarvis Online | Current Date: ${new Date().toLocaleDateString()}`);
     bot.launch().catch(() => {});
 });
