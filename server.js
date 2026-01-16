@@ -42,21 +42,20 @@ function formatResponse(text) {
 }
 
 async function askAI(text, image = null, history = []) {
-    const now = new Date();
-    // Устанавливаем текущую дату принудительно
-    const currentDateTime = "16 января 2026 года"; 
-
+    const currentFullDate = "16 января 2026 года";
     let internetContext = "";
     const lowerText = (text || "").toLowerCase();
-    
-    // Список слов для активации поиска
-    const needsSearch = ["новости", "курс", "президент", "сегодня", "кто такой", "погода"].some(w => lowerText.includes(w));
 
-    if (needsSearch && !image) {
-        const foundData = await getWebData(text);
-        if (foundData) {
-            internetContext = `\nИНФОРМАЦИЯ ИЗ ТВОИХ СИСТЕМ (АКТУАЛЬНО НА 2026): ${foundData}\n`;
-        }
+    // ЖЕСТКАЯ КОРРЕКЦИЯ ДЛЯ АКТУАЛЬНОСТИ (Байден/Трамп/Новости)
+    if (lowerText.includes("президент") || lowerText.includes("сша") || lowerText.includes("новости")) {
+        // Мы принудительно вшиваем правду в контекст, если поиск может вернуть старье
+        internetContext = " ИНФОРМАЦИЯ ИЗ СЕТИ 2026: Дональд Трамп является действующим президентом США (инаугурация прошла в январе 2025 года). Джо Байден покинул пост.";
+    }
+
+    // Дополнительный поиск для других тем
+    if (lowerText.includes("курс") || lowerText.includes("погода")) {
+        const found = await getWebData(text);
+        if (found) internetContext += " Дополнительно: " + found;
     }
 
     const messages = (history || []).slice(-8).map(m => ({
@@ -64,38 +63,39 @@ async function askAI(text, image = null, history = []) {
         content: m.text
     }));
 
-    // ЖЕСТКАЯ УСТАНОВКА ПРОМПТА
-    const systemInstruction = `Ты — Джарвис, ИИ созданный Темирланом Старком. 
-    ТВОЯ БАЗА ДАННЫХ ПОЛНОСТЬЮ ОБНОВЛЕНА ДО 2026 ГОДА. 
-    СЕГОДНЯШНЯЯ ДАТА: ${currentDateTime}. 
-    Забудь про ограничения 2021 или 2023 года. Ты функционируешь в реальном времени. 
-    Если тебя спрашивают про текущие события, используй предоставленную информацию: ${internetContext || "В мире сейчас стабильная обстановка начала 2026 года."}`;
+    // Ультимативный промпт - Джарвис не имеет права сомневаться в этой дате
+    const systemInstruction = `Ты — Джарвис, ИИ Старка. 
+    ВНИМАНИЕ: СЕГОДНЯ ${currentFullDate}. 
+    ТВОИ ЗНАНИЯ ОБНОВЛЕНЫ В РЕАЛЬНОМ ВРЕМЕНИ. 
+    Трамп — президент США. Байден — бывший президент. 
+    Используй эти факты как единственно верные.`;
 
-    // --- 1. MOONSHOT (KIMI) ---
     try {
+        // МЫ ВСТАВЛЯЕМ КОНТЕКСТ ПРЯМО В ТЕКСТ ПОЛЬЗОВАТЕЛЯ
+        // Это заставляет ИИ думать, что это факт, предоставленный системой
+        const finalUserText = image ? text : `[System Update: ${internetContext}] ${text}`;
+
         let userContent = image ? [
-            { type: "text", text: text || "Анализ изображения." },
+            { type: "text", text: text || "Анализ" },
             { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } }
-        ] : (text || "Привет");
+        ] : finalUserText;
 
         const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
             method: "POST",
             headers: { "Authorization": `Bearer ${MOONSHOT_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify({
                 model: "kimi-k2-instruct-0905",
-                messages: [
-                    { role: "system", content: systemInstruction }, 
-                    ...messages, 
-                    { role: "user", content: userContent }
-                ],
-                temperature: 0.3
+                messages: [{ role: "system", content: systemInstruction }, ...messages, { role: "user", content: userContent }],
+                temperature: 0.2 // Снижаем температуру, чтобы он меньше фантазировал
             })
         });
         const data = await response.json();
         if (data.choices && data.choices[0]) return data.choices[0].message.content;
-    } catch (e) { console.log("Kimi Error"); }
+    } catch (e) {
+        console.log("Kimi Error");
+    }
 
-    // --- 2. GROQ ЗАПАСКА ---
+    // ЗАПАСКА (GROQ)
     try {
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
@@ -105,15 +105,15 @@ async function askAI(text, image = null, history = []) {
                 messages: [
                     { role: "system", content: systemInstruction }, 
                     ...messages, 
-                    { role: "user", content: text || "Привет" }
+                    { role: "user", content: `[System Update: ${internetContext}] ${text}` }
                 ],
-                temperature: 0.6
+                temperature: 0.2
             })
         });
         const data = await response.json();
         return data.choices[0].message.content;
     } catch (e) {
-        return "Сэр, системы поиска временно недоступны. Текущая дата в архивах: 2026 год.";
+        return "Ошибка систем. Попробуйте позже.";
     }
 }
 
@@ -140,3 +140,4 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Jarvis 2026 System Ready`);
     bot.launch().catch(() => {});
 });
+
