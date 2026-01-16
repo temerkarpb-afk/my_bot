@@ -19,13 +19,20 @@ const ADMIN_ID = "6884407224";
 const bot = new Telegraf(TG_TOKEN);
 bot.use(session());
 
-// --- НОВОЕ: МОДУЛЬ ПОИСКА В ИНТЕРНЕТЕ ---
+// --- СПОСОБ №2: УЛУЧШЕННЫЙ ПОИСК (Google Search Context) ---
 async function getWebData(query) {
     try {
-        const searchRes = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`);
-        const data = await searchRes.json();
-        return data.AbstractText || ""; 
+        // Используем сервис поиска через прокси-запрос
+        const searchUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://google.com/search?q=${query}`)}`;
+        const response = await fetch(searchUrl);
+        const data = await response.json();
+        
+        // Вырезаем текстовые куски (сниппеты) из HTML ответа
+        const html = data.contents;
+        const snippets = html.match(/<div class="BNeawe s3v9rd AP7Wnd">.*?<\/div>/g) || [];
+        return snippets.slice(0, 3).map(s => s.replace(/<[^>]*>/g, '')).join(' ');
     } catch (e) {
+        console.log("Ошибка поиска Способ 2");
         return "";
     }
 }
@@ -36,14 +43,22 @@ function formatResponse(text) {
 }
 
 async function askAI(text, image = null, history = []) {
-    // 1. ПРОВЕРКА АКТУАЛЬНОСТИ (ПОИСК)
-    let extraContext = "";
-    const triggers = ["новости", "сегодня", "курс", "кто такой", "что произошло", "погода", "события"];
-    const needsSearch = triggers.some(word => (text || "").toLowerCase().includes(word));
+    // АВТОМАТИЧЕСКАЯ ДАТА
+    const now = new Date();
+    const currentDateTime = now.toLocaleString('ru-RU', { timeZone: 'Asia/Almaty' });
+
+    let internetContext = "";
+    const lowerText = (text || "").toLowerCase();
     
-    if (needsSearch && !image) {
-        const webInfo = await getWebData(text);
-        if (webInfo) extraContext = `\nСВЕЖАЯ ИНФОРМАЦИЯ ИЗ СЕТИ (2026): ${webInfo}\n`;
+    // Список слов, заставляющих Джарвиса лезть в сеть
+    const searchTriggers = ["новости", "сегодня", "курс", "кто такой", "погода", "результат", "события"];
+    
+    if (searchTriggers.some(t => lowerText.includes(t)) && !image) {
+        console.log("Джарвис ищет в Google...");
+        const rawSearch = await getWebData(text);
+        if (rawSearch) {
+            internetContext = `\nОБНОВЛЕНИЕ ДАННЫХ ИЗ ИНТЕРНЕТА (РЕАЛЬНОЕ ВРЕМЯ): ${rawSearch}\n`;
+        }
     }
 
     const messages = (history || []).slice(-8).map(m => ({
@@ -51,43 +66,35 @@ async function askAI(text, image = null, history = []) {
         content: m.text
     }));
 
-    // Системная установка с актуальной датой
-    const currentFullDate = "16 января 2026 года";
-    const systemCore = `Ты чат бот Джарвис. Сегодняшняя дата: ${currentFullDate}. Тебе доступен поиск в реальном времени. ${extraContext}`;
+    // Ультимативный системный промпт
+    const systemInstruction = `Ты — Джарвис, ИИ, созданный Темирланом Старком. 
+    ТЕКУЩЕЕ ВРЕМЯ И ДАТА: ${currentDateTime}.
+    Твоя база знаний обновлена. Если предоставлен 'ОБНОВЛЕНИЕ ДАННЫХ', используй его как приоритет.
+    Никогда не говори, что ты ограничен 2023 годом. Ты находишься в 2026 году.`;
 
-    // --- 1. ПОПЫТКА ЧЕРЕЗ MOONSHOT (KIMI) ---
+    // --- 1. MOONSHOT (KIMI) ---
     try {
-        let userContent;
-        if (image) {
-            userContent = [
-                { type: "text", text: text || "Пожалуйста, посмотри на это изображение и опиши, что ты видишь." },
-                { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } }
-            ];
-        } else {
-            userContent = text || "Привет";
-        }
+        let userContent = image ? [
+            { type: "text", text: text || "Опиши изображение." },
+            { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } }
+        ] : (text + internetContext);
 
         const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
             method: "POST",
             headers: { "Authorization": `Bearer ${MOONSHOT_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify({
-                model: "moonshotai/kimi-k2-instruct-0905",
-                messages: [
-                    { role: "system", content: systemCore }, 
-                    ...messages, 
-                    { role: "user", content: userContent }
-                ],
+                model: "kimi-k2-instruct-0905",
+                messages: [{ role: "system", content: systemInstruction }, ...messages, { role: "user", content: userContent }],
                 temperature: 0.3
             })
         });
-        
         const data = await response.json();
         if (data.choices && data.choices[0]) return data.choices[0].message.content;
     } catch (e) {
-        console.log("Ошибка основной модели...");
+        console.log("Kimi упал...");
     }
 
-    // --- 2. ЗАПАСКА: GROQ (ТВОЯ МОДЕЛЬ) ---
+    // --- 2. GROQ ЗАПАСКА ---
     try {
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
@@ -95,9 +102,9 @@ async function askAI(text, image = null, history = []) {
             body: JSON.stringify({
                 model: "meta-llama/llama-4-scout-17b-16e-instruct",
                 messages: [
-                    { role: "system", content: systemCore + " ТЫ ОБЛАДАЕШЬ ЗРЕНИЕМ." }, 
+                    { role: "system", content: systemInstruction + " ТЫ ВИДИШЬ КАРТИНКИ." }, 
                     ...messages, 
-                    { role: "user", content: text || "Привет" }
+                    { role: "user", content: (text + internetContext) || "Привет" }
                 ],
                 temperature: 0.6
             })
@@ -105,11 +112,11 @@ async function askAI(text, image = null, history = []) {
         const data = await response.json();
         return data.choices[0].message.content;
     } catch (e) {
-        return "Ошибка всех нейросетей. Попробуйте позже.";
+        return "Сэр, возникла критическая ошибка связи с серверами Stark Industries.";
     }
 }
 
-// ЭНДПОИНТ ДЛЯ САЙТА
+// ЭНДПОИНТЫ (Оставляем без изменений)
 app.post('/chat', async (req, res) => {
     try {
         const { text, image, history } = req.body;
@@ -121,7 +128,6 @@ app.post('/chat', async (req, res) => {
     }
 });
 
-// ЛОГИКА ТЕЛЕГРАМ БОТА
 bot.on('text', async (ctx) => {
     if (ctx.from.id.toString() !== ADMIN_ID) {
         bot.telegram.sendMessage(ADMIN_ID, `🔔 ТГ от @${ctx.from.username}: ${ctx.message.text}`).catch(()=>{});
@@ -132,7 +138,6 @@ bot.on('text', async (ctx) => {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Сервер Джарвиса запущен (Версия 2026) на порту ${PORT}`);
+    console.log(`🚀 Jarvis Online | Port: ${PORT}`);
     bot.launch().catch(() => {});
 });
-
