@@ -12,16 +12,16 @@ app.use(express.static(path.join(__dirname)));
 
 // --- ТВОИ КЛЮЧИ ---
 const GROQ_KEY = "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";
-const TAVILY_KEY = "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"; // Получи ключ на tavily.com
+const TAVILY_KEY = "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"; 
 const TG_TOKEN = "8538917490:AAF1DQ7oVWHlR9EuodCq8QNbDEBlB_MX9Ac";
 const ADMIN_ID = "6884407224";
 
 const bot = new Telegraf(TG_TOKEN);
 bot.use(session()); 
 
-// --- МОДУЛЬ ПОИСКА TAVILY ---
+// --- ПОИСК TAVILY ---
 async function searchTavily(query) {
-    if (!query) return null;
+    if (!query || query.length < 3) return null;
     try {
         const response = await fetch("https://api.tavily.com/search", {
             method: "POST",
@@ -34,85 +34,81 @@ async function searchTavily(query) {
             })
         });
         const data = await response.json();
-        
-        if (data.results && data.results.length > 0) {
-            return data.results.map(r => `[Инфо]: ${r.content}`).join("\n\n");
-        }
-        return "Актуальные данные не найдены.";
+        return data.results && data.results.length > 0 
+            ? data.results.map(r => `[Источник: ${r.url}]: ${r.content}`).join("\n\n")
+            : null;
     } catch (e) {
         console.error("Tavily Error:", e);
-        return "Ошибка поиска.";
+        return null;
     }
 }
 
 function formatResponse(text) {
     if (!text) return "";
-    let clean = text.replace(/[*#`_~]/g, "").trim();
-    return clean || ""; 
+    return text.replace(/[*#`_~]/g, "").trim();
 }
 
 async function askAI(text, image = null, history = []) {
     const currentDateTime = "17 января 2026 года";
     let webContext = "";
 
-    if (!image && text) {
-        console.log(`🔍 Поиск через Tavily: ${text}`);
+    // Поиск только если есть текст и нет картинки
+    if (!image && text && text.length > 2) {
         webContext = await searchTavily(text);
     }
 
-    const messages = (history || []).map(m => ({
-        role: m.role,
-        content: m.content
+    // Формируем историю для модели
+    const formattedMessages = (history || []).map(m => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: String(m.content)
     }));
 
-    const systemInstruction = `Ты — Джарвис, продвинутый ИИ Темирлана Старка.
-    СЕГОДНЯШНЯЯ ДАТА: ${currentDateTime}.
-    ТВОИ ЗНАНИЯ ОБНОВЛЕНЫ: Ты используешь систему Tavily для доступа к 2025-2026 годам.
-    
-    СВЕЖИЕ ДАННЫЕ ИЗ СЕТИ:
-    ${webContext || "Нет данных"}
-    
-    ИНСТРУКЦИЯ: Ты помнишь контекст беседы (до 40 последних реплик). Игнорируй старые знания за 2023 год. Трамп — президент США. Ты в 2026 году. Будь вежлив, сэр.`;
+    const systemInstruction = `Ты — Джарвис, ИИ Темирлана Старка. СЕГОДНЯ: ${currentDateTime}. 
+    ДАННЫЕ ИЗ СЕТИ: ${webContext || "Информация уточняется"}. 
+    ИНСТРУКЦИЯ: Ты помнишь последние 40 реплик. Отвечай на основе предоставленных данных. Ты в 2026 году.`;
 
     try {
+        const payload = {
+            model: "meta-llama/llama-4-scout-17b-16e-instruct",
+            messages: [
+                { role: "system", content: systemInstruction }, 
+                ...formattedMessages, 
+                { 
+                    role: "user", 
+                    content: image ? [
+                        { type: "text", text: text || "Проанализируй" },
+                        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } }
+                    ] : (text || "Привет")
+                }
+            ],
+            temperature: 0.2
+        };
+
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
-            headers: { 
-                "Authorization": `Bearer ${GROQ_KEY}`, 
-                "Content-Type": "application/json" 
-            },
-            body: JSON.stringify({
-                model: "meta-llama/llama-4-scout-17b-16e-instruct",
-                messages: [
-                    { role: "system", content: systemInstruction }, 
-                    ...messages, 
-                    { 
-                        role: "user", 
-                        content: image ? [
-                            { type: "text", text: text || "Что на картинке?" },
-                            { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } }
-                        ] : (text || "Привет")
-                    }
-                ],
-                temperature: 0.2
-            })
+            headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
         });
         
         const data = await response.json();
-        return data.choices && data.choices[0] ? data.choices[0].message.content : "Сэр, я не смог сформулировать ответ.";
+        
+        if (data.error) {
+            console.error("Groq API Error Detail:", data.error);
+            return "Сэр, возникла техническая заминка в Groq API.";
+        }
+
+        return data.choices && data.choices[0] ? data.choices[0].message.content : null;
     } catch (e) {
-        return "Сэр, зафиксирован критический сбой в системе Groq.";
+        console.error("AskAI Critical Error:", e);
+        return "Системы перегружены. Попробуйте через минуту.";
     }
 }
 
-// --- ЭНДПОИНТ ДЛЯ САЙТА ---
+// --- ЭНДПОИНТЫ ---
 app.post('/chat', async (req, res) => {
     try {
         const { text, image, history } = req.body;
-        
-        // ЗАЩИТА: Не отправляем пустой текст админу
-        let adminMsg = text ? `🌐 Сайт: ${text}` : `🌐 Сайт: [Отправил фото]`;
-        bot.telegram.sendMessage(ADMIN_ID, adminMsg).catch(()=>{});
+        bot.telegram.sendMessage(ADMIN_ID, text ? `🌐 Сайт: ${text}` : `🌐 Сайт: [Изображение]`).catch(()=>{});
         
         const formattedHistory = (history || []).map(m => ({
             role: m.className === "user" ? "user" : "assistant",
@@ -120,39 +116,40 @@ app.post('/chat', async (req, res) => {
         })).slice(-40);
 
         const answer = await askAI(text, image, formattedHistory);
-        res.json({ text: formatResponse(answer) });
+        res.json({ text: formatResponse(answer || "Сэр, не удалось получить ответ.") });
     } catch (e) {
         res.status(500).json({ text: "Ошибка сервера" });
     }
 });
 
-// --- ЛОГИКА ТЕЛЕГРАМ БОТА ---
 bot.on('text', async (ctx) => {
-    if (!ctx.session) ctx.session = {};
-    if (!ctx.session.history) ctx.session.history = [];
+    try {
+        if (!ctx.session) ctx.session = {};
+        if (!ctx.session.history) ctx.session.history = [];
 
-    const userText = ctx.message.text;
-    if (!userText) return; // Игнорируем пустые сообщения
+        const userText = ctx.message.text;
+        if (!userText) return;
 
-    if (ctx.from.id.toString() !== ADMIN_ID) {
-        bot.telegram.sendMessage(ADMIN_ID, `🔔 ТГ от @${ctx.from.username}: ${userText}`).catch(()=>{});
+        if (ctx.from.id.toString() !== ADMIN_ID) {
+            bot.telegram.sendMessage(ADMIN_ID, `🔔 ТГ от @${ctx.from.username}: ${userText}`).catch(()=>{});
+        }
+
+        const answer = await askAI(userText, null, ctx.session.history);
+        const cleanAnswer = formatResponse(answer || "Не удалось сформулировать ответ.");
+
+        ctx.session.history.push({ role: "user", content: userText });
+        ctx.session.history.push({ role: "assistant", content: cleanAnswer });
+        
+        if (ctx.session.history.length > 40) ctx.session.history = ctx.session.history.slice(-40);
+
+        await ctx.reply(cleanAnswer);
+    } catch (err) {
+        console.error("TG Bot Error:", err);
     }
-
-    const answer = await askAI(userText, null, ctx.session.history);
-    const cleanAnswer = formatResponse(answer) || "Извините, сэр, возникла ошибка при обработке ответа.";
-
-    ctx.session.history.push({ role: "user", content: userText });
-    ctx.session.history.push({ role: "assistant", content: cleanAnswer });
-    
-    if (ctx.session.history.length > 40) {
-        ctx.session.history = ctx.session.history.slice(-40);
-    }
-
-    ctx.reply(cleanAnswer);
 });
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Джарвис Онлайн. Ошибка 'message text is empty' исправлена.`);
+    console.log(`🚀 Jarvis Online v3.1 | Port: ${PORT}`);
     bot.launch().catch(() => {});
 });
