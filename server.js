@@ -17,9 +17,9 @@ const TG_TOKEN = "8538917490:AAF1DQ7oVWHlR9EuodCq8QNbDEBlB_MX9Ac";
 const ADMIN_ID = "6884407224";
 
 const bot = new Telegraf(TG_TOKEN);
-bot.use(session()); // Сессии для хранения памяти
+bot.use(session()); // Включаем поддержку сессий для памяти в ТГ
 
-// --- МОДУЛЬ ПОИСКА TAVILY ---
+// --- МОДУЛЬ ПОИСКА TAVILY (Глаза в интернете) ---
 async function searchTavily(query) {
     try {
         const response = await fetch("https://api.tavily.com/search", {
@@ -53,17 +53,18 @@ async function askAI(text, image = null, history = []) {
     const currentDateTime = "16 января 2026 года";
     let webContext = "";
 
+    // Поиск в сети перед запросом к ИИ
     if (!image && text) {
         console.log(`🔍 Поиск через Tavily: ${text}`);
         webContext = await searchTavily(text);
     }
 
-    // Берем историю (теперь до 40 сообщений)
-    const messages = (history || []).map(m => ({
-        role: m.role,
+    const messages = (history || []).slice(-10).map(m => ({
+        role: m.role, // "user" или "assistant"
         content: m.content
     }));
 
+    // Системный промпт для Groq
     const systemInstruction = `Ты — Джарвис, продвинутый ИИ Темирлана Старка.
     СЕГОДНЯШНЯЯ ДАТА: ${currentDateTime}.
     ТВОИ ЗНАНИЯ ОБНОВЛЕНЫ: Ты используешь систему Tavily для доступа к 2025-2026 годам.
@@ -71,7 +72,7 @@ async function askAI(text, image = null, history = []) {
     СВЕЖИЕ ДАННЫЕ ИЗ СЕТИ:
     ${webContext}
     
-    ИНСТРУКЦИЯ: Ты помнишь контекст беседы (до 40 последних реплик). Игнорируй старые знания за 2023 год. Если данные из сети говорят о событиях 2025/2026 года, отвечай на их основе. Трамп — президент США. Ты в 2026 году. Будь вежлив, сэр.`;
+    ИНСТРУКЦИЯ: Игнорируй свои старые знания за 2023 год. Если данные из сети говорят о событиях 2025 или 2026 года, отвечай на их основе. Трамп — президент США. Ты в 2026 году. Будь вежлив, сэр.`;
 
     try {
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -102,6 +103,7 @@ async function askAI(text, image = null, history = []) {
             return data.choices[0].message.content;
         }
     } catch (e) {
+        console.log("Groq API Error");
         return "Сэр, зафиксирован критический сбой в системе Groq.";
     }
 }
@@ -112,10 +114,11 @@ app.post('/chat', async (req, res) => {
         const { text, image, history } = req.body;
         bot.telegram.sendMessage(ADMIN_ID, `🌐 Сайт: ${text || "[Фото]"}`).catch(()=>{});
         
+        // Преобразуем историю с фронтенда в нужный формат
         const formattedHistory = (history || []).map(m => ({
             role: m.className === "user" ? "user" : "assistant",
             content: m.text
-        })).slice(-40); // Ограничение 40 для сайта
+        }));
 
         const answer = await askAI(text, image, formattedHistory);
         res.json({ text: formatResponse(answer) });
@@ -124,8 +127,9 @@ app.post('/chat', async (req, res) => {
     }
 });
 
-// --- ЛОГИКА ТЕЛЕГРАМ БОТА С УВЕЛИЧЕННОЙ ПАМЯТЬЮ ---
+// --- ЛОГИКА ТЕЛЕГРАМ БОТА С ПАМЯТЬЮ ---
 bot.on('text', async (ctx) => {
+    // Инициализируем историю для нового пользователя
     if (!ctx.session) ctx.session = {};
     if (!ctx.session.history) ctx.session.history = [];
 
@@ -135,16 +139,16 @@ bot.on('text', async (ctx) => {
         bot.telegram.sendMessage(ADMIN_ID, `🔔 ТГ от @${ctx.from.username}: ${userText}`).catch(()=>{});
     }
 
+    // Получаем ответ от ИИ, передавая накопленную историю сессии
     const answer = await askAI(userText, null, ctx.session.history);
     const cleanAnswer = formatResponse(answer);
 
-    // Добавляем в историю
+    // Сохраняем текущий диалог в память (ограничиваем последними 10 сообщениями)
     ctx.session.history.push({ role: "user", content: userText });
     ctx.session.history.push({ role: "assistant", content: cleanAnswer });
     
-    // ПАМЯТЬ: Храним 40 реплик (20 пар диалога)
-    if (ctx.session.history.length > 40) {
-        ctx.session.history = ctx.session.history.slice(-40);
+    if (ctx.session.history.length > 10) {
+        ctx.session.history = ctx.session.history.slice(-10);
     }
 
     ctx.reply(cleanAnswer);
@@ -152,7 +156,6 @@ bot.on('text', async (ctx) => {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Джарвис Онлайн. Память: 40 реплик. Системы активны.`);
+    console.log(`🚀 Джарвис (Groq + Tavily + Memory) запущен на порту ${PORT}`);
     bot.launch().catch(() => {});
 });
-
