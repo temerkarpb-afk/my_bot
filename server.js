@@ -10,8 +10,7 @@ app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname))); 
 
-// --- ТВОИ КЛЮЧИ ---
-const GROQ_KEY = "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";
+const GROQ_KEY = "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";
 const TAVILY_KEY = "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"; 
 const TG_TOKEN = "8538917490:AAF1DQ7oVWHlR9EuodCq8QNbDEBlB_MX9Ac";
 const ADMIN_ID = "6884407224";
@@ -153,5 +152,6 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Jarvis Online v3.1 | Port: ${PORT}`);
     bot.launch().catch(() => {});
 });
+
 
 
