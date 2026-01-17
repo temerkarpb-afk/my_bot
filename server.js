@@ -69,7 +69,7 @@ async function askAI(text, image = null, history = []) {
 
     try {
         const payload = {
-            model: "meta-llama/llama-prompt-guard-2-22m",
+            model: "meta-llama/llama-prompt-guard-2-86m",
             messages: [
                 { role: "system", content: systemInstruction }, 
                 ...formattedMessages, 
@@ -153,4 +153,5 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Jarvis Online v3.1 | Port: ${PORT}`);
     bot.launch().catch(() => {});
 });
+
 
