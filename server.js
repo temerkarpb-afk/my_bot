@@ -10,8 +10,8 @@ app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname))); 
 
-// --- КЛЮЧИ ---
-const GROQ_KEY = "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"; 
+// --- КЛЮЧИ (ПРОВЕРЬТЕ ИХ ЕЩЕ РАЗ) ---
+const GROQ_KEY = "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"; 
 const TAVILY_KEY = "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"; 
 const TG_TOKEN = "8538917490:AAF1DQ7oVWHlR9EuodCq8QNbDEBlB_MX9Ac";
 const ADMIN_ID = "6884407224";
@@ -19,9 +19,9 @@ const ADMIN_ID = "6884407224";
 const bot = new Telegraf(TG_TOKEN);
 bot.use(session()); 
 
-// --- ПОИСК TAVILY (Оптимизированный) ---
+// --- ПОИСК TAVILY (МАКСИМАЛЬНО СЖАТЫЙ) ---
 async function searchTavily(query) {
-    if (!query || query.length < 3) return null;
+    if (!query || query.length < 5) return null;
     try {
         const response = await fetch("https://api.tavily.com/search", {
             method: "POST",
@@ -29,37 +29,34 @@ async function searchTavily(query) {
             body: JSON.stringify({
                 api_key: TAVILY_KEY,
                 query: query,
-                search_depth: "basic", // "basic" короче и быстрее
-                max_results: 3 // Берем только 3 главных результата
+                search_depth: "basic",
+                max_results: 2 // Берем только 2 самых важных результата
             })
         });
         const data = await response.json();
-        // Обрезаем текст каждого результата до 500 символов
-        return data.results ? data.results.map(r => r.content.substring(0, 500)).join("\n") : null;
+        // Берем только первые 400 символов из каждого результата
+        return data.results ? data.results.map(r => r.content.substring(0, 400)).join("\n") : null;
     } catch (e) { return null; }
 }
 
 async function askAI(text, image = null, history = []) {
-    const currentDateTime = "17 января 2026 года";
+    const currentDateTime = "25 января 2026 года";
     let webContext = "";
 
-    // Поиск только для важных вопросов
-    if (!image && text && text.length > 5) {
+    // Поиск только если вопрос сложный
+    if (!image && text && text.length > 8) {
         webContext = await searchTavily(text);
     }
 
-    // ОГРАНИЧЕНИЕ ПАМЯТИ: Берем только последние 12 сообщений для отправки в API
-    // Это решит проблему с ошибкой "reduce the length"
-    const contextHistory = (history || []).slice(-12).map(m => ({
+    // ОПТИМИЗАЦИЯ ПАМЯТИ: Берем последние 8-10 сообщений
+    const contextHistory = (history || []).slice(-10).map(m => ({
         role: m.role,
-        content: String(m.content)
+        content: String(m.content).substring(0, 1000) // Ограничиваем длину каждого сообщения в истории
     }));
 
-    const systemInstruction = `Ты — Джарвис, ИИ бот. Сегодня: ${currentDateTime}. 
-    Данные 2026: ${webContext || "базовые системы"}. 
-    Инструкция: Трамп президент. Будь краток и точен.`;
+    const systemInstruction = `Ты — Джарвис, ИИ Старка. Сегодня: ${currentDateTime}. Трамп президент. Данные из сети: ${webContext || "база 2026"}. Будь краток.`;
 
-    // Используем самую стабильную модель для длинных контекстов
+    // Самая стабильная модель
     const model = "llama-3.3-70b-versatile";
 
     try {
@@ -71,7 +68,7 @@ async function askAI(text, image = null, history = []) {
                 messages: [
                     { role: "system", content: systemInstruction }, 
                     ...contextHistory, 
-                    { role: "user", content: text || "Привет" }
+                    { role: "user", content: String(text).substring(0, 2000) } // Ограничиваем длину вопроса
                 ],
                 temperature: 0.3
             })
@@ -80,11 +77,28 @@ async function askAI(text, image = null, history = []) {
         const data = await response.json();
         
         if (data.error) {
-            console.error("Groq Error:", data.error.message);
-            return "Сэр, база данных перегружена. Попробуйте сократить вопрос.";
+            console.error("DEBUG GROQ ERROR:", data.error);
+            // Если всё равно ошибка длины, пробуем отправить ВООБЩЕ БЕЗ истории
+            if (data.error.message.includes("length") || data.error.code === "rate_limit_exceeded") {
+                 const retryRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [
+                            { role: "system", content: systemInstruction },
+                            { role: "user", content: text }
+                        ],
+                        temperature: 0.2
+                    })
+                });
+                const retryData = await retryRes.json();
+                return retryData.choices?.[0]?.message?.content || "Сэр, даже с чистой памятью возникла ошибка.";
+            }
+            return "Сэр, зафиксирована ошибка: " + data.error.message;
         }
 
-        return data.choices && data.choices[0] ? data.choices[0].message.content : "Ошибка модуля.";
+        return data.choices?.[0]?.message?.content || "Молчание со стороны сервера, сэр.";
     } catch (e) { return "Сэр, системы связи вышли из строя."; }
 }
 
@@ -93,14 +107,21 @@ bot.on('text', async (ctx) => {
     if (!ctx.session) ctx.session = { history: [] };
     const userText = ctx.message.text;
 
+    // Уведомление админу
+    if (ctx.from.id.toString() !== ADMIN_ID) {
+        bot.telegram.sendMessage(ADMIN_ID, `🔔 ТГ: @${ctx.from.username}: ${userText}`).catch(()=>{});
+    }
+
     const answer = await askAI(userText, null, ctx.session.history);
-    
-    // В локальной истории храним 40, но в API (выше) отправляем только 12
+    const cleanAnswer = answer.replace(/[*#`_~]/g, "");
+
     ctx.session.history.push({ role: "user", content: userText });
-    ctx.session.history.push({ role: "assistant", content: answer });
+    ctx.session.history.push({ role: "assistant", content: cleanAnswer });
+    
+    // В памяти сервера оставляем 40, но в API выше уйдет только 10
     if (ctx.session.history.length > 40) ctx.session.history = ctx.session.history.slice(-40);
 
-    ctx.reply(answer.replace(/[*#`_~]/g, ""));
+    ctx.reply(cleanAnswer);
 });
 
 // --- ЭНДПОИНТ САЙТА ---
@@ -116,7 +137,6 @@ app.post('/chat', async (req, res) => {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Джарвис оптимизирован. Проблема длины сообщений решена.`);
+    console.log(`🚀 Джарвис стабилизирован. Контекстное окно под контролем.`);
     bot.launch().catch(() => {});
 });
-
