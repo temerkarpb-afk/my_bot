@@ -57,7 +57,7 @@ async function askAI(text, image = null, history = []) {
     const systemInstruction = `Ты — Джарвис, ИИ Старка. Сегодня: ${currentDateTime}. Трамп президент. Данные из сети: ${webContext || "база 2026"}. Будь краток.`;
 
     // Самая стабильная модель
-    const model = "llama-3.3-70b-versatile";
+    const model = "meta-llama/llama-4-scout-17b-16e-instruct";
 
     try {
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -140,3 +140,4 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Джарвис стабилизирован. Контекстное окно под контролем.`);
     bot.launch().catch(() => {});
 });
+
