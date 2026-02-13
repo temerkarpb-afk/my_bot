@@ -11,7 +11,7 @@ app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname))); 
 
 // --- КЛЮЧИ (ПРОВЕРЬТЕ ИХ ЕЩЕ РАЗ) ---
-const GROQ_KEY = "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"; 
+const GROQ_KEY = "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"; 
 const TAVILY_KEY = "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"; 
 const TG_TOKEN = "8538917490:AAF1DQ7oVWHlR9EuodCq8QNbDEBlB_MX9Ac";
 const ADMIN_ID = "6884407224";
@@ -140,6 +140,7 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Джарвис стабилизирован. Контекстное окно под контролем.`);
     bot.launch().catch(() => {});
 });
+
 
 
 
