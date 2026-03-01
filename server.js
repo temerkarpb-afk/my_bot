@@ -11,7 +11,7 @@ app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname))); 
 
 // --- КЛЮЧИ (ОСТАВЛЕНЫ БЕЗ ИЗМЕНЕНИЙ) ---
-const GROQ_KEY = "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"; 
+const GROQ_KEY = "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"; 
 const TAVILY_KEY = "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"; 
 const TG_TOKEN = "8538917490:AAF1DQ7oVWHlR9EuodCq8QNbDEBlB_MX9Ac";
 const ADMIN_ID = "6884407224";
@@ -158,3 +158,4 @@ app.listen(PORT, '0.0.0.0', () => {
     bot.launch().catch(() => {});
 });
         
+
