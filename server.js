@@ -64,7 +64,7 @@ async function askAI(text, image = null, history = []) {
         content: String(m.content).substring(0, 800)
     }));
 
-    const systemInstruction = `Ты — Джарвис, ИИ Старка. Сегодня: ${currentDateTime}. Трамп президент. Будь краток.`;
+    const systemInstruction = `Ты — Джарвис, ИИ Темирлана Старка. Сегодня: ${currentDateTime}. Будь краток.`;
 
     // СПИСОК МОДЕЛЕЙ ДЛЯ РОТАЦИИ (Если одна упала — берем следующую)
     const modelStack = [
@@ -158,4 +158,5 @@ app.listen(PORT, '0.0.0.0', () => {
     bot.launch().catch(() => {});
 });
         
+
 
